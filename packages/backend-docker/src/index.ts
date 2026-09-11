@@ -15,6 +15,7 @@ import type { Context } from '@deepseek-ai/cordis'
 
 import {
   BackendUnavailableError,
+  UnsupportedModeError,
   type BoxBackend,
   type BoxExecRequest,
   type BoxExecResult,
@@ -27,6 +28,7 @@ import {
   containerName,
   demuxStream,
   describeEndpoint,
+  effectiveTmpfsPaths,
   engineRequest,
   LABELS,
   selectEndpoint,
@@ -38,7 +40,9 @@ export {
   containerName,
   demuxStream,
   describeEndpoint,
+  effectiveTmpfsPaths,
   EngineError,
+  isAtOrUnder,
   parseDockerHost,
   pingEndpoint,
   selectEndpoint,
@@ -74,6 +78,12 @@ const DEFAULT_MEMORY_BYTES = 1024 * 1024 * 1024
 /** 默认 CPU 核数。 */
 const DEFAULT_CPUS = 1
 
+/** Windows 容器引擎拒绝建箱时的说明。 */
+const THIS_MUST_BE_LINUX_MESSAGE =
+  'dsh-runbox requires a Linux-container engine: Windows containers do not support a ' +
+  'read-only root filesystem, so the promised file-effect confinement cannot be enforced. ' +
+  'Switch Docker Desktop to Linux containers (or point DOCKER_HOST at a Linux engine).'
+
 interface ContainerSummary {
   Id: string
   Created?: number
@@ -108,6 +118,7 @@ export class DockerBackend implements BoxBackend {
   readonly #timeoutMs: number
   readonly #image: string
   #endpoint: EngineEndpoint | undefined
+  #engineOs: string | undefined
   #lastProbeDetail = 'not probed yet'
 
   constructor(options: {
@@ -171,6 +182,31 @@ export class DockerBackend implements BoxBackend {
     return engineRequest(endpoint, method, path, body, timeoutMs, signal)
   }
 
+  /**
+   * 确认引擎跑的是 **Linux 容器**。
+   *
+   * Windows 容器引擎不支持只读 rootfs（`invalid option: read-only mode is not
+   * supported for Windows containers`），也就是说我们在那儿**兑现不了**承诺的
+   * 文件效果围栏。此时唯一诚实的做法是拒绝建箱，而不是降级成一个可写 rootfs
+   * 的"隔离"——后者会让上层以为有边界，而边界根本不存在。
+   *
+   * 这是 CI 的 windows-latest runner 抓出来的：它跑的是 Windows 容器引擎。
+   */
+  async #assertLinuxEngine(): Promise<void> {
+    if (this.#engineOs !== undefined) {
+      if (this.#engineOs !== 'linux') {
+        throw new UnsupportedModeError(THIS_MUST_BE_LINUX_MESSAGE)
+      }
+      return
+    }
+    const info = await this.#call('GET', '/info', undefined, this.#timeoutMs * 5)
+    const osType = parseJson<{ OSType?: string }>(info.body, 'info').OSType ?? 'unknown'
+    this.#engineOs = osType
+    if (osType !== 'linux') {
+      throw new UnsupportedModeError(THIS_MUST_BE_LINUX_MESSAGE)
+    }
+  }
+
   /** 确保镜像在本地；不在则拉取。 */
   async ensureImage(image = this.#image): Promise<void> {
     try {
@@ -194,12 +230,16 @@ export class DockerBackend implements BoxBackend {
    * 而用户不会知道。
    */
   async create(spec: BoxSpec): Promise<BoxHandle> {
+    await this.#assertLinuxEngine()
     await this.ensureImage(spec.image)
 
     const { confinement } = spec
     const mountSuffix = confinement.workspaceReadOnly ? ':ro' : ':rw'
+    // 与工作区重叠的 tmpfs 路径必须剔除，否则后挂的 tmpfs 会盖住工作区，
+    // 而且不报错。详见 effectiveTmpfsPaths 的说明。
+    const tmpfsPaths = effectiveTmpfsPaths(confinement.tmpfsPaths, spec.workspaceMountPath)
     const tmpfs: Record<string, string> = {}
-    for (const path of confinement.tmpfsPaths) {
+    for (const path of tmpfsPaths) {
       tmpfs[path] = 'rw,size=256m'
     }
 

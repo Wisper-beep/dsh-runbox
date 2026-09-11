@@ -24,12 +24,14 @@ import {
   containerName,
   demuxStream,
   DockerBackend,
+  effectiveTmpfsPaths,
+  isAtOrUnder,
   parseDockerHost,
   pingEndpoint,
   selectEndpoint,
 } from './index.ts'
 import { LABELS } from './engine.ts'
-import { encodeFrame } from './test-helpers.ts'
+import { encodeFrame, linuxEngineSkipReason } from './test-helpers.ts'
 
 describe('端点解析', () => {
   it('DOCKER_HOST=npipe 解析成命名管道路径', () => {
@@ -113,6 +115,32 @@ describe('容器名清洗', () => {
   })
 })
 
+describe('tmpfs 与工作区的重叠判定', () => {
+  it('路径前缀相同但不是子路径时不算包含', () => {
+    assert.equal(isAtOrUnder('/tmp', '/tmp-other'), false)
+    assert.equal(isAtOrUnder('/tmp', '/tmp'), true)
+    assert.equal(isAtOrUnder('/tmp', '/tmp/x'), true)
+  })
+
+  it('工作区在 /tmp 下时，/tmp 的 tmpfs 必须被剔除——否则会把工作区盖住', () => {
+    // 这是 CI 抓出来的真实缺陷：宿主临时目录就在 /tmp 下，
+    // tmpfs 后挂会遮盖 bind mount，且不报任何错。
+    assert.deepEqual(effectiveTmpfsPaths(['/tmp', '/run'], '/tmp/runbox-it-abc'), ['/run'])
+  })
+
+  it('工作区在别处时两个 tmpfs 都保留', () => {
+    assert.deepEqual(effectiveTmpfsPaths(['/tmp', '/run'], '/home/u/repo'), ['/tmp', '/run'])
+  })
+
+  it('工作区恰好等于 /tmp 时同样剔除', () => {
+    assert.deepEqual(effectiveTmpfsPaths(['/tmp', '/run'], '/tmp'), ['/run'])
+  })
+
+  it('工作区是根时全部剔除：任何 tmpfs 都会遮住工作区的某个子目录', () => {
+    assert.deepEqual(effectiveTmpfsPaths(['/tmp', '/run'], '/'), [])
+  })
+})
+
 describe('探测失败路径', () => {
   it('端点不存在时返回 ok:false 而不是抛错', async () => {
     const result = await pingEndpoint(
@@ -136,11 +164,9 @@ describe('探测失败路径', () => {
   })
 })
 
-// —— 集成层：以下用例需要真实 Docker 守护进程 ——
+// —— 集成层：以下用例需要真实 **Linux 容器**引擎 ——
 
-const engineProbe = await selectEndpoint(candidateEndpoints(), 1200)
-const dockerSkip =
-  engineProbe.endpoint === undefined ? 'docker engine unavailable' : false
+const dockerSkip = await linuxEngineSkipReason()
 
 describe('集成：真实容器', { skip: dockerSkip }, () => {
   const image = process.env['DSH_RUNBOX_TEST_IMAGE'] ?? 'bash:5.2'

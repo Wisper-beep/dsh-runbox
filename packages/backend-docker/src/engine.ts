@@ -238,3 +238,37 @@ export const LABELS = {
   /** 归属会话。 */
   session: 'dsh.runbox.session',
 } as const
+
+/** 判断 `child` 是否等于 `parent` 或位于其下（纯词法，路径已规范化）。 */
+export function isAtOrUnder(parent: string, child: string): boolean {
+  if (parent === child) {
+    return true
+  }
+  const base = parent.endsWith('/') ? parent : `${parent}/`
+  return child.startsWith(base)
+}
+
+/**
+ * 计算真正可用的 tmpfs 路径。
+ *
+ * **为什么需要这个函数**：容器里后挂的挂载点会**遮盖**先挂的。我们把工作区
+ * bind mount 到宿主同路径，如果工作区恰好位于 `/tmp` 之下（比如宿主临时目录），
+ * 而 `/tmp` 又被挂成 tmpfs，那么工作区就被 tmpfs 盖住了——容器里看到的是一个
+ * 空目录，写进去的东西宿主上永远看不到，而且**不会有任何报错**。
+ *
+ * 这是 CI 抓出来的真实缺陷，不是理论风险。因此这里把与工作区有重叠的 tmpfs
+ * 路径剔除：宁可少一个可写临时区，也不能让工作区静默失联。
+ *
+ * @param tmpfsPaths - 策略声明的 tmpfs 路径。
+ * @param workspaceMountPath - 工作区在箱内的挂载路径。
+ * @returns 剔除重叠项后的 tmpfs 路径。
+ */
+export function effectiveTmpfsPaths(
+  tmpfsPaths: readonly string[],
+  workspaceMountPath: string,
+): string[] {
+  return tmpfsPaths.filter(
+    (path) =>
+      !isAtOrUnder(path, workspaceMountPath) && !isAtOrUnder(workspaceMountPath, path),
+  )
+}
