@@ -340,7 +340,9 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
     try {
       box = await backend.create(makeSpec('it-kill', hostDir))
       const stream = await backend.startExec(box, {
-        argv: ['bash', '-c', 'sleep 120'],
+        // 刻意造出两层：bash 是直接子进程，sleep 是它的子进程。
+        // 只杀直接子进程的实现会在这里露馅——sleep 会被 reparent 后继续跑。
+        argv: ['bash', '-c', 'sleep 120 & wait'],
         cwd: hostDir,
       })
       // 包装脚本是异步起跑的，给 pid 文件写入留出时间。

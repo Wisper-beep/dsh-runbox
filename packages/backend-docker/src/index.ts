@@ -407,8 +407,7 @@ export class DockerBackend implements BoxBackend {
    *
    * 进程树终止靠 pid 文件：argv 被包了一层，真实进程的 pid 落在我方运行时
    * 目录里（tmpfs，且刻意不在工作区内）。`exec` 后 shell 被替换掉，因此记下的
-   * pid 就是目标进程本身的 pid；Docker 的 exec 会话让它成为进程组首进程，
-   * 于是 `kill -TERM -<pid>` 就是**按进程树**终止。
+   * pid 就是目标进程本身的 pid。终止时再从那个 pid 出发扫整棵进程树。
    */
   async startExec(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecStream> {
     const spec = this.#specs.get(box.id)
@@ -547,14 +546,37 @@ export class DockerBackend implements BoxBackend {
     }, graceMs)
   }
 
-  /** 向进程组发信号；组不存在时回落到单个 pid。 */
+  /**
+   * 向**整棵进程树**发信号。
+   *
+   * 为什么不能只 `kill -TERM -<pid>`：那依赖"exec 出来的进程是进程组首进程"，
+   * 而 Docker 的 exec 并不保证这一点。CI 上实测到的后果很典型——直接子进程被杀，
+   * 孙进程被 reparent 到 1 之后继续跑，而 `waitForExit` 已经返回"已退出"，
+   * 于是调用方以为清理干净了。
+   *
+   * 因此改为扫 `/proc`：**先自底向上收集后代，再逐个发信号**。顺序是关键，
+   * 先杀父会让子进程 reparent，之后就再也找不到它们。只用 `/proc` 与 shell
+   * 内建，不假设镜像里装了 `pgrep` / `ps`。
+   */
   async #signalTree(box: BoxHandle, pid: number, signal: 'TERM' | 'KILL'): Promise<void> {
+    const script = [
+      'sig="$1"; root="$2"',
+      'children() {',
+      '  for d in /proc/[0-9]*; do',
+      '    p="${d#/proc/}"',
+      '    while read -r k v _; do',
+      '      if [ "$k" = "PPid:" ] && [ "$v" = "$1" ]; then printf "%s\\n" "$p"; break; fi',
+      '    done < "$d/status" 2>/dev/null',
+      '  done',
+      '}',
+      'sweep() {',
+      '  for c in $(children "$1"); do sweep "$c"; done',
+      '  kill -"$sig" "$1" 2>/dev/null || true',
+      '}',
+      'sweep "$root"',
+    ].join('\n')
     await this.exec(box, {
-      argv: [
-        'bash',
-        '-c',
-        `kill -${signal} -${String(pid)} 2>/dev/null || kill -${signal} ${String(pid)} 2>/dev/null || true`,
-      ],
+      argv: ['bash', '-c', script, 'dsh-runbox', signal, String(pid)],
       cwd: RUNBOX_RUNTIME_DIR,
     })
   }
