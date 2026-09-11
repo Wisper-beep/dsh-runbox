@@ -258,6 +258,15 @@ export class DockerBackend implements BoxBackend {
           Tmpfs: tmpfs,
           Binds: [`${spec.workspaceRoot}:${spec.workspaceMountPath}${mountSuffix}`],
           CapDrop: ['ALL'],
+          // 只补回 DAC_OVERRIDE：容器内的 root 需要它才能写入宿主用户拥有的目录。
+          // 工作区挂载通常属于宿主用户（模式 0700 的临时目录、受权限保护的仓库
+          // 比比皆是），丢掉这个能力会让**工作区写入静默失败**——CI 抓到过。
+          //
+          // 安全性不受影响：真正要守的两条边界（只读 rootfs、只读工作区）由
+          // **挂载标志**在挂载命名空间层面强制，报的是 EROFS，与文件权限位无关，
+          // DAC_OVERRIDE 绕不过去。这里换来的只是"箱内 root 等价于普通 Docker
+          // 容器里的 root"。
+          CapAdd: ['DAC_OVERRIDE'],
           SecurityOpt: ['no-new-privileges'],
           PidsLimit: spec.limits.pidsLimit ?? DEFAULT_PIDS_LIMIT,
           Memory: spec.limits.memoryBytes ?? DEFAULT_MEMORY_BYTES,

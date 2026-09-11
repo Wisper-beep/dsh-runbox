@@ -197,8 +197,14 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
       assert.match(hello.stdout, /hello-from-box/)
       assert.ok(hello.stdout.includes('Linux'), '箱内应当是 Linux，与宿主平台解耦')
 
-      // 工作区是挂载进来的：写进去的文件宿主上也该看到
-      await backend.exec(box, { argv: ['bash', '-c', `echo mounted > ${hostDir}/mounted.txt`], cwd: hostDir })
+      // 工作区是挂载进来的：写进去的文件宿主上也该看到。
+      // 这里必须断言退出码——否则写入失败会表现成"宿主上没这个文件"，
+      // 而真正的原因藏在没人看的 stderr 里（CI 上就是这么绕了一圈）。
+      const write = await backend.exec(box, {
+        argv: ['bash', '-c', `echo mounted > ${hostDir}/mounted.txt`],
+        cwd: hostDir,
+      })
+      assert.equal(write.exitCode, 0, `工作区写入失败：${write.stderr}`)
       assert.ok(existsSync(join(hostDir, 'mounted.txt')), '工作区挂载应当双向可见')
 
       // 箱内 /tmp 是 tmpfs：写进去的东西不该出现在宿主上
