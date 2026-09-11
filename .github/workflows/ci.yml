@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # 官方 seam 包的 peer 闭包里有一个未发布到 npm 的包
+      # （@deepseek-ai/dsh-type-meta），因此必须跳过 peer 自动安装。
+      # 详见 README 的「已知问题」一节。
+      - name: Install
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      # tsc -b 同时是类型检查与构建。provider-* 包继承官方抽象 seam 类，
+      # 因此这一步也是「官方契约有没有变」的门禁：签名漂移会在这里编译失败。
+      - name: Build & typecheck
+        run: npm run build
+
+      - name: Test
+        run: npm test
