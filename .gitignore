@@ -13,6 +13,12 @@ coverage/
 # 大体积原始数据：CSV 快照已入库，原始 JSON 可用 scripts 重新生成
 research/ecosystem-raw.json
 
+# 官方 seam 包解包产物（第三方代码，`npm run seams:pull` 可随时重建）
+reference/
+
+# TypeScript 项目引用构建缓存
+*.tsbuildinfo
+
 # 本地环境与日志
 *.log
 .env

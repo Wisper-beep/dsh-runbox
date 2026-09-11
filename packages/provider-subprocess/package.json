@@ -1,0 +1,35 @@
+{
+  "name": "@dsh-runbox/provider-subprocess",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Container-backed implementation of the ctx.subprocess capability seam for DeepSeek Harness.",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "subprocess",
+    "container"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-subprocess": "0.0.1-rc.1",
+    "@dsh-runbox/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@dsh-runbox/backend-docker",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Docker / Podman engine backend for dsh-runbox: disposable, resource-capped boxes reached over the Engine API.",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "docker",
+    "podman",
+    "container"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@dsh-runbox/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  }
+}

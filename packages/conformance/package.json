@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-runbox/conformance",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Conformance gate for dsh-runbox: proves the plugin actually loads into a real Cordis context and that the backend selection fails closed.",
+  "license": "MIT",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@dsh-runbox/backend-docker": "0.0.0",
+    "@dsh-runbox/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  }
+}

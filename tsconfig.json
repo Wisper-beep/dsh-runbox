@@ -1,0 +1,35 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/provider-subprocess"
+    },
+    {
+      "path": "packages/provider-fs"
+    },
+    {
+      "path": "packages/provider-shell"
+    },
+    {
+      "path": "packages/provider-jobs"
+    },
+    {
+      "path": "packages/provider-terminal"
+    },
+    {
+      "path": "packages/sandbox-bridge"
+    },
+    {
+      "path": "packages/backend-docker"
+    },
+    {
+      "path": "packages/conformance"
+    },
+    {
+      "path": "packages/ui"
+    }
+  ]
+}

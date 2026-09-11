@@ -4,8 +4,46 @@
 
 `dsh-runbox` 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）补上**隔离执行地基**：把 shell / 文件 / 进程 / 终端 / 后台任务这一整层能力，从宿主本地搬到一次性容器里执行——可丢弃、有资源与网络边界、全程可审计。
 
-> 状态：**选题与架构已定，尚未进入实现**。当前仓库内容为调研证据 + 架构提案。
-> 拟接入 GitHub 后按里程碑推进（见下）。
+> 状态：**M0 已完成**——monorepo 骨架已建、官方 seam 契约已摸清并固化为编译期门禁，
+> 最小插件已在真实 Cordis 上下文中加载通过，CI 在 Ubuntu 与 Windows 双平台跑绿。
+> 实现按里程碑推进（见下）。
+
+## 快速开始
+
+```bash
+git clone https://github.com/Wisper-beep/dsh-runbox.git
+cd dsh-runbox
+npm ci --legacy-peer-deps   # 见「已知问题」，这个参数是必须的
+npm run build               # tsc -b：同时是类型检查与构建
+npm test                    # 25 个断言，含 M0 加载门禁
+```
+
+拉取官方 seam 类型契约（离线参考，产物不入库）：
+
+```bash
+npm run seams:pull          # → reference/dsh-seams/（已 gitignore）
+```
+
+## 仓库结构
+
+```
+packages/
+  core/                 执行地基：后端注册表、箱契约、策略翻译、fail-closed
+  backend-docker/       Docker/Podman 引擎后端（probe 已可用，箱生命周期 M1）
+  provider-shell/       ctx.shell 替换实现（契约已定型，实现 M1）
+  provider-subprocess/  ctx.subprocess 替换实现（M1）
+  provider-fs/          ctx.fs 替换实现（M2）
+  provider-jobs/        ctx.jobs 替换实现（M3）
+  provider-terminal/    ctx.terminals 后端（M3）
+  sandbox-bridge/       逐调用策略 → 箱围栏配置（M2）
+  conformance/          M0 验收门禁（加载 / 可逆 / fail-closed）
+  ui/                   Web 设置卡、状态面板、审计时间线（M4）
+docs/
+  01-选题提案.md         选题论证、架构、里程碑、风险
+  02-seam契约速览.md     官方各个 seam 的接口要点（实现依据）
+research/                生态调研证据（4646 插件快照 + 空白核验 + 可复现脚本）
+scripts/                 契约抓取、包骨架生成
+```
 
 ## 为什么做这个
 
@@ -50,7 +88,7 @@ dsh-runbox
 
 | 阶段 | 交付 |
 |---|---|
-| M0 | 吃透官方 seam 类型契约；monorepo 骨架 + CI；跑通最小插件加载 |
+| ~~M0~~ ✅ | 官方 seam 契约已摸清并固化为编译期门禁；monorepo 骨架 + 双平台 CI；最小插件已在真实 Cordis 上下文加载通过 |
 | M1 | `core` + Docker 后端 + `subprocess` / `shell` provider；宿主零副作用；fail-closed |
 | M2 | `fs` provider + 挂载语义 + 策略翻译 + 强制执行上报 |
 | M3 | `terminal` / `jobs` provider + 会话级生命周期 + 孤儿回收 |
@@ -69,6 +107,22 @@ research/                 生态调研证据（4646 插件快照 + 空白核验 
 - DeepSeek Harness 官方仓库：https://github.com/deepseek-ai/deepseek-harness
 - 官方文档站：https://deepseek-harness.github.io/deepseek-harness/
 - 选题提案（本仓）：[`docs/01-选题提案.md`](docs/01-选题提案.md)
+
+## 已知问题
+
+**1. `npm ci` 必须带 `--legacy-peer-deps`。**
+
+官方 seam 包的 peer 闭包里包含一个**未发布到 npm** 的包：`@deepseek-ai/dsh-type-meta`（registry 返回 404）。npm 的 peer 自动安装会因此中断整个 install。仓库根的 `.npmrc` 已固定该行为。
+
+这是环境约束而非偏好：类型层面由 `skipLibCheck` 兜住，运行时的真实实例由宿主 dsh 提供。上游补发该包后即可移除。
+
+**2. `reference/` 不入库。**
+
+`reference/dsh-seams/` 是官方 seam 包的解包产物（第三方代码，MIT），可随时用 `npm run seams:pull` 重新生成，因此不提交。契约稳定后应把版本号写回 `scripts/fetch-seam-contracts.py` 的 `MANIFEST` 锁定。
+
+**3. 契约门禁是编译期的。**
+
+`provider-*` 包继承官方抽象 seam 类，所以官方签名一旦漂移，`npm run build` 会失败——这是刻意的。但它只能证明**签名一致**，不能证明**行为一致**；行为一致性由 `packages/conformance` 的用例逐步覆盖。
 
 ## 许可
 

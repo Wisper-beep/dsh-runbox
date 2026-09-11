@@ -1,0 +1,35 @@
+{
+  "name": "@dsh-runbox/sandbox-bridge",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Translation layer between the dsh sandbox policy and dsh-runbox box confinement.",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "sandbox",
+    "policy"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-sandbox-policy": "0.0.1-rc.1",
+    "@dsh-runbox/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  }
+}

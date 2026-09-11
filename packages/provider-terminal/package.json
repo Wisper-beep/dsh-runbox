@@ -1,0 +1,36 @@
+{
+  "name": "@dsh-runbox/provider-terminal",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Container-backed terminal backend for the ctx.terminals seam of DeepSeek Harness.",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "terminal",
+    "pty",
+    "container"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-terminal": "0.0.1-rc.3",
+    "@dsh-runbox/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  }
+}

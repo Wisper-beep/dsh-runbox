@@ -1,0 +1,26 @@
+{
+  "name": "dsh-runbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated execution substrate for DeepSeek Harness (dsh): run agent shell / fs / process / terminal / jobs inside disposable containers.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "node --test \"packages/*/dist/**/*.test.js\"",
+    "verify": "npm run build && npm run test",
+    "seams:pull": "python scripts/fetch-seam-contracts.py"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
