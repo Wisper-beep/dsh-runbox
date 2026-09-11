@@ -8,14 +8,14 @@
 
 ## 当前状态
 
-**未可用的开发预览。** 地基与后端探测已落地，各 provider 的实现按里程碑推进中。
+**未可用的开发预览。** 地基、Docker 后端与 shell 前台执行已落地；其余 provider 按里程碑推进中。
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
 | M0 | 官方 seam 契约、monorepo 骨架、CI、最小插件加载 | ✅ 已完成 |
-| M1 | Docker 箱生命周期；`subprocess` / `shell` provider 实现 | 进行中 |
-| M2 | `fs` provider、逐调用策略翻译、强制执行度上报 | 未开始 |
-| M3 | `terminal` / `jobs` provider、会话级生命周期与孤儿回收 | 未开始 |
+| M1 | Docker 箱生命周期；`shell` 前台执行 | ✅ 代码完成，待真机验收 |
+| M2 | `subprocess` / `fs` provider、强制执行度上报 | 未开始 |
+| M3 | 后台进程、`terminal` / `jobs` provider、会话级生命周期 | 未开始 |
 | M4 | Web UI（设置 / 状态 / 审计）、网络与资源策略 | 未开始 |
 | M5 | Podman / WSL2 / microVM / SSH 第二后端、一致性测试套件 | 未开始 |
 
@@ -24,9 +24,9 @@
 | 包 | 状态 |
 |---|---|
 | `@dsh-runbox/core` | 可用：后端注册表、箱契约、策略翻译、fail-closed 选择 |
-| `@dsh-runbox/backend-docker` | `probe()` 可用；箱生命周期待 M1 |
-| `@dsh-runbox/provider-shell` | 契约已定型；实现待 M1 |
-| `@dsh-runbox/provider-subprocess` | 占位，待 M1 |
+| `@dsh-runbox/backend-docker` | 可用：端点候选探测 + 完整箱生命周期（建 / 执行 / 停 / 删 / 列） |
+| `@dsh-runbox/provider-shell` | 前台执行可用；后台进程与 `danger-full-access` 明确报错 |
+| `@dsh-runbox/provider-subprocess` | 占位，顺延至 M2 |
 | `@dsh-runbox/provider-fs` | 占位，待 M2 |
 | `@dsh-runbox/sandbox-bridge` | 占位，待 M2 |
 | `@dsh-runbox/provider-jobs` | 占位，待 M3 |

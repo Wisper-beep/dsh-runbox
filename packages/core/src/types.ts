@@ -7,6 +7,8 @@
  * @module @dsh-runbox/core/types
  */
 
+import type { BoxConfinement } from './policy.ts'
+
 /** 箱的稳定标识。 */
 export type BoxId = string
 
@@ -50,6 +52,13 @@ export interface BoxSpec {
   readonly network: BoxNetworkMode
   /** 资源限额。 */
   readonly limits: BoxLimits
+  /**
+   * 本次的围栏配置，由 `confinementFor()` 从官方沙箱模式翻译而来。
+   *
+   * 刻意**不**在这里再放一个 `SandboxMode` 字段：翻译只发生一次，后端只消费
+   * 结果。否则每加一个后端都要重新实现一遍模式语义，隔离就会开始走样。
+   */
+  readonly confinement: BoxConfinement
 }
 
 /** 一个已创建的箱。 */

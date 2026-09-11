@@ -14,6 +14,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 
 import { BackendRegistry } from './registry.ts'
+import { BoxManager, type BoxDefaults } from './box-manager.ts'
 import type { BoxBackend } from './types.ts'
 
 export {
@@ -23,6 +24,7 @@ export {
   UnsupportedModeError,
 } from './errors.ts'
 export { BackendRegistry } from './registry.ts'
+export { BoxManager, sessionKey, type BoxDefaults, type BoxRequest } from './box-manager.ts'
 export { confinementFor, withinWorkspace, type BoxConfinement } from './policy.ts'
 export type {
   BoxBackend,
@@ -35,6 +37,13 @@ export type {
   BoxSpec,
   BoxState,
 } from './types.ts'
+
+/** 建箱默认值：镜像 / 网络 / 资源。 */
+export const DEFAULT_BOX_DEFAULTS: BoxDefaults = {
+  image: process.env['DSH_RUNBOX_IMAGE'] ?? 'bash:5.2',
+  network: 'none',
+  limits: { cpus: 1, memoryBytes: 1024 * 1024 * 1024, pidsLimit: 512 },
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -65,6 +74,20 @@ export class RunboxService extends Service {
   use(backend: BoxBackend): () => void {
     this.ctx.logger?.info?.('runbox backend registered: %s', backend.name)
     return this.backends.register(backend)
+  }
+
+  /**
+   * 建一个会话级的箱管理器。
+   *
+   * 刻意由调用方持有而不是服务内部单例：provider 各自需要自己的默认值
+   * （镜像、资源），而"会话 → 箱"的映射必须共享同一个 `BoxManager` 实例。
+   * 一个 host 里通常只建一个，传给所有 provider。
+   *
+   * @param defaults - 建箱默认值，缺省用 `DEFAULT_BOX_DEFAULTS`。
+   * @returns 绑定到本服务后端注册表的箱管理器。
+   */
+  createBoxManager(defaults: BoxDefaults = DEFAULT_BOX_DEFAULTS): BoxManager {
+    return new BoxManager(this.backends, defaults)
   }
 }
 

@@ -98,20 +98,27 @@ describe('M0 门禁：fail-closed', () => {
   })
 })
 
-describe('M0 门禁：Docker 后端探测契约', () => {
-  it('未命中真实 Docker 时 probe() 返回 false 而非抛错', async () => {
-    const backend = new DockerBackend(
-      { kind: 'socket', socketPath: '/nonexistent/no-docker.sock' },
-      800,
-    )
-    assert.equal(await backend.probe(), false)
+describe('M0 门禁：Docker 后端 fail-closed', () => {
+  /** 指向一个必然不存在的端点，让后端确定性地处于"不可用"状态。 */
+  const unreachable = (): DockerBackend =>
+    new DockerBackend({
+      endpoints: [{ kind: 'socket', socketPath: '/nonexistent/no-docker.sock' }],
+      timeoutMs: 500,
+    })
+
+  it('未命中真实引擎时 probe() 返回 false 而非抛错', async () => {
+    assert.equal(await unreachable().probe(), false)
   })
 
-  it('未实现的能力响亮失败，而不是静默空转', async () => {
-    const backend = new DockerBackend({ kind: 'socket', socketPath: '/nonexistent/x.sock' }, 500)
+  it('引擎不可用时 create() 抛 BackendUnavailableError，绝不静默回落', async () => {
+    const backend = unreachable()
     await assert.rejects(
       () => backend.create({} as never),
-      /not implemented yet \(planned milestone: M1\)/,
+      (error: unknown) => {
+        assert.ok(error instanceof BackendUnavailableError)
+        assert.equal(error.code, 'SANDBOX_UNAVAILABLE')
+        return true
+      },
     )
   })
 })
