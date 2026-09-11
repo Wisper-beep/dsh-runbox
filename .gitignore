@@ -1,0 +1,25 @@
+# 项目/工作区数据，不随仓库走
+.workbuddy/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+out/
+*.tsbuildinfo
+.turbo/
+coverage/
+
+# 大体积原始数据：CSV 快照已入库，原始 JSON 可用 scripts 重新生成
+research/ecosystem-raw.json
+
+# 本地环境与日志
+*.log
+.env
+.env.*
+!.env.example
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini

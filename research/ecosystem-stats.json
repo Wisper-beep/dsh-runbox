@@ -1,0 +1,475 @@
+{
+  "stats": {
+    "snapshot_name": "DeepSeek Harness 插件生态快照",
+    "snapshot_date": "2026-09-11",
+    "source": "npm registry search API (keywords:dsh-plugin)",
+    "packages": 4646,
+    "first_publish": "2026-08-13",
+    "latest_publish": "2026-09-11",
+    "monthly_downloads_total": 4290234,
+    "monthly_downloads_top10_share": 0.1772,
+    "monthly_downloads_top100_share": 0.3853,
+    "packages_with_zero_downloads": 952
+  },
+  "density_probes": {
+    "评测/回归/基准": {
+      "matches": 51,
+      "top": [
+        {
+          "name": "dsh-browser",
+          "downloads": 6223,
+          "desc": "Browser automation for DeepSeek Harness: Playwright-powered open/click/type/screenshot/eval tools so the agent"
+        },
+        {
+          "name": "dsh-excel-chat",
+          "downloads": 3355,
+          "desc": "Talk to Excel in DeepSeek Harness: create/edit spreadsheets, formulas, styles, filters, and tables by conversa"
+        },
+        {
+          "name": "dsh-harbor-evolution",
+          "downloads": 3179,
+          "desc": "DeepSeek Harness plugin and Skill for Harbor Candidate and Historical Session evaluation workflows."
+        },
+        {
+          "name": "oh-my-knowledge",
+          "downloads": 3001,
+          "desc": "OMK — Observe. Measure. Know. Evidence-backed knowledge changes for AI applications."
+        },
+        {
+          "name": "design-playbook",
+          "downloads": 2454,
+          "desc": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components"
+        }
+      ]
+    },
+    "记忆/上下文": {
+      "matches": 218,
+      "top": [
+        {
+          "name": "dsh-mnemon",
+          "downloads": 33077,
+          "desc": "Composable three-tier memory control plane for DeepSeek Harness: persistent runtime context, searchable projec"
+        },
+        {
+          "name": "dsh-memory-eternal",
+          "downloads": 15025,
+          "desc": "记忆核心（Memory Eternal）：自研的 DeepSeek Harness 记忆插件，不移植任何既有记忆框架——对话结束后自动沉淀知识卡到本地 Markdown Vault（自研去重、自研 CJK 检索、可 gi"
+        },
+        {
+          "name": "@furongjun1999/dsh-memory",
+          "downloads": 7684,
+          "desc": "灵枢（Lingshu·líng shū）DeepSeek Harness 插件：完整大脑——长期记忆/知识飞轮/自我认知/递归反思接入 DSH，对话自动沉淀进 md_cg 认知图（md 文档）"
+        },
+        {
+          "name": "@lemoncat7/dsh-knowledge",
+          "downloads": 7522,
+          "desc": "Local and remote knowledge bases for DeepSeek Harness, with scoped recall, controlled write-back, and a Web ma"
+        },
+        {
+          "name": "@memtensor/memos-local-plugin",
+          "downloads": 6942,
+          "desc": "Reflect2Evolve memory plugin: layered L1/L2/L3 memory, reflection-weighted value backprop, cross-task policy i"
+        }
+      ]
+    },
+    "主题/皮肤/桌宠/挂件": {
+      "matches": 243,
+      "top": [
+        {
+          "name": "dsh-dream-skin",
+          "downloads": 26000,
+          "desc": "DeepSeek Harness 换肤插件（Dream Skin for DSH）：8 套 iOS / Linear 式清透冷调的高质感主题 + 弥散光壁纸 + 每皮肤智能背景 + 强调色 + 主题包分享，把换肤做成材质"
+        },
+        {
+          "name": "dsh-quant",
+          "downloads": 18855,
+          "desc": "🐳 The Everything-Plugin Quant OS — AI-native & DSH-native: 46 tools, 6 pluggable domains (data/alpha/ML/risk/e"
+        },
+        {
+          "name": "dsh-pet",
+          "downloads": 17235,
+          "desc": "A floating desktop pet for the DeepSeek Harness Web UI: idle breathing, occasional direction turns, random act"
+        },
+        {
+          "name": "@aiwayds/dsh-tui-pi",
+          "downloads": 17082,
+          "desc": "A fully-featured pi-style terminal UI for DeepSeek Harness (dsh) — history look-back & fork-at-turn, guided pr"
+        },
+        {
+          "name": "dsh-whale-widget",
+          "downloads": 17082,
+          "desc": "DSH Web 界面右下角的 DeepSeek 余额小鲸鱼挂件（含今日已用、峰谷定价、随机台词、音效与每轮消耗统计）"
+        }
+      ]
+    },
+    "成本/用量/余额": {
+      "matches": 388,
+      "top": [
+        {
+          "name": "dsh-cost-meter",
+          "downloads": 47037,
+          "desc": "DeepSeek Harness 会话费用统计插件:本会话成本、当日费用、历史记录与官方价格同步,支持多厂商多模型价格计费(内置 90+ 模型价格目录与自动匹配)、主流 Coding Plan 订阅额度查询与显示(9 家"
+        },
+        {
+          "name": "@kenz1117/dsh-ui-usage-billing",
+          "downloads": 17506,
+          "desc": "Usage billing dashboard for DeepSeek Harness: sidebar cost metrics plus a full dashboard modal, priced from a "
+        },
+        {
+          "name": "dsh-whale-widget",
+          "downloads": 17082,
+          "desc": "DSH Web 界面右下角的 DeepSeek 余额小鲸鱼挂件（含今日已用、峰谷定价、随机台词、音效与每轮消耗统计）"
+        },
+        {
+          "name": "dsh-codex-subscription",
+          "downloads": 12238,
+          "desc": "Use ChatGPT and Codex subscriptions in DeepSeek Harness with OAuth, quota, safe resets, web search, images, an"
+        },
+        {
+          "name": "@nonamelego/dsh-catppuccin",
+          "downloads": 9291,
+          "desc": "Catppuccin themes + a toggleable glassmorphism skin for the DeepSeek Harness web GUI — Latte, Frappé, Macchiat"
+        }
+      ]
+    },
+    "IM 渠道接入": {
+      "matches": 80,
+      "top": [
+        {
+          "name": "@xmanrui/dsh-im",
+          "downloads": 38045,
+          "desc": "把十一种 IM 渠道和公网 AI Office 接入本机 DeepSeek Harness。 Connect eleven IM channels and a public AI Office to a local De"
+        },
+        {
+          "name": "dsh-lark-bot",
+          "downloads": 14146,
+          "desc": "把 DeepSeek Harness (dsh) 装进飞书/Lark 的 bot，扫码即用：dsh Web 可视化设置、流式卡片、项目工作区、并行任务、多角色 Agent、安全网守护。| Bridge DeepSeek "
+        },
+        {
+          "name": "@wenbin_wb/dsh-bridge",
+          "downloads": 12820,
+          "desc": "手机扫码即可在移动端/公网继续用 DeepSeek Harness，人不在电脑前也能接着干。一键局域网二维码、Cloudflare 公网隧道、自建隧道与微信 / QQ / 飞书 / Telegram Bot（多工作区/会"
+        },
+        {
+          "name": "dsh-feishu-bot",
+          "downloads": 12819,
+          "desc": "把 DeepSeek Harness (dsh) 装进飞书/Lark 的 bot，扫码即用：dsh Web 可视化设置、流式卡片、项目工作区、并行任务、多角色 Agent、安全网守护。| Bridge DeepSeek "
+        },
+        {
+          "name": "@kazecreator/dsh-settings-pro",
+          "downloads": 6346,
+          "desc": "DeepSeek Harness settings-pro plugin: IM bridge (Telegram/WeChat), DeepSeek usage, cross-restart memory, deskt"
+        }
+      ]
+    },
+    "视觉/多模态": {
+      "matches": 245,
+      "top": [
+        {
+          "name": "dsh-memory-eternal",
+          "downloads": 15025,
+          "desc": "记忆核心（Memory Eternal）：自研的 DeepSeek Harness 记忆插件，不移植任何既有记忆框架——对话结束后自动沉淀知识卡到本地 Markdown Vault（自研去重、自研 CJK 检索、可 gi"
+        },
+        {
+          "name": "dsh-codex-subscription",
+          "downloads": 12238,
+          "desc": "Use ChatGPT and Codex subscriptions in DeepSeek Harness with OAuth, quota, safe resets, web search, images, an"
+        },
+        {
+          "name": "@goodandready/dsh-vision-bridge",
+          "downloads": 10596,
+          "desc": "Flagship multimodal vision hub for DeepSeek Harness: ~40 tools, PDF drag-and-drop, LaTeX formulas, complex tab"
+        },
+        {
+          "name": "dsh-image-gen",
+          "downloads": 6956,
+          "desc": "Bring ChatGPT-like image generation to DeepSeek Harness — Gemini, OpenAI, Seedream, DashScope, local ComfyUI &"
+        },
+        {
+          "name": "@kazecreator/dsh-settings-pro",
+          "downloads": 6346,
+          "desc": "DeepSeek Harness settings-pro plugin: IM bridge (Telegram/WeChat), DeepSeek usage, cross-restart memory, deskt"
+        }
+      ]
+    },
+    "快照/回滚/时间机器": {
+      "matches": 95,
+      "top": [
+        {
+          "name": "@morlay/session-rdb",
+          "downloads": 27677,
+          "desc": "RDB durable session backend for DeepSeek Harness: implements both session-persistence and session-branch (rewi"
+        },
+        {
+          "name": "@morlay/session-branch",
+          "downloads": 25568,
+          "desc": "Provider abstraction + high-level service for rewind / retry / fork over DeepSeek Harness event-sourced sessio"
+        },
+        {
+          "name": "@morlay/ui-conversation-message-actions",
+          "downloads": 21719,
+          "desc": "Rewind / retry / fork orchestration (host) plus conversation.chat.node renderer replacement (browser) — messag"
+        },
+        {
+          "name": "dsh-vscode-mode",
+          "downloads": 6472,
+          "desc": "DSH 上的类 VSCode 编码体验：Monaco 编辑器（文件页签/QuickOpen/状态栏，可驻 DSH 0.1.5+ 官方右侧 Sidebar 与对话同屏）+ 命令栏（Ctrl+Shift+P）与可扩展指令系统"
+        },
+        {
+          "name": "meow-memory",
+          "downloads": 6215,
+          "desc": "Cross-session project memory for DeepSeek Harness: seven-layer SQLite memory, first-turn snapshot injection, p"
+        }
+      ]
+    },
+    "插件供应链安全": {
+      "matches": 40,
+      "top": [
+        {
+          "name": "upstream-radar",
+          "downloads": 15589,
+          "desc": "Always-on dependency and compatibility monitoring for DeepSeek Harness plugins, including exact paths, upstrea"
+        },
+        {
+          "name": "correctover",
+          "downloads": 2955,
+          "desc": "AI Agent runtime authorization & evidence verification — tool-call GuardrailProvider, CCS 7-dimension verifica"
+        },
+        {
+          "name": "dsh-memoir",
+          "downloads": 2474,
+          "desc": "DeepSeek Harness (DSH) local-first cross-session project memory: bounded cache-friendly Hot Memory, BM25 recal"
+        },
+        {
+          "name": "@perrylink/dsh-skill-pack-security-provider",
+          "downloads": 2429,
+          "desc": "Provider plugin for dsh-skill-pack-security: registers the pack's skills/ (zh) or skills-en/ (en) edition on c"
+        },
+        {
+          "name": "dsh-score",
+          "downloads": 1732,
+          "desc": "Multi-dimensional quality scoring for DeepSeek Harness plugins: scores one repo or npm package across install "
+        }
+      ]
+    },
+    "浏览器/计算机使用": {
+      "matches": 148,
+      "top": [
+        {
+          "name": "@morlay/ui-conversation-message-actions",
+          "downloads": 21719,
+          "desc": "Rewind / retry / fork orchestration (host) plus conversation.chat.node renderer replacement (browser) — messag"
+        },
+        {
+          "name": "dsh-builtin-browser",
+          "downloads": 13052,
+          "desc": "Shared real browser plugin for DeepSeek Harness: install-and-use — a visible native browser the human can take"
+        },
+        {
+          "name": "@wxg-prc-cpg/browser-skill-dsh-plugin",
+          "downloads": 7322,
+          "desc": "DeepSeek Harness tool plugin that exposes BrowserSkill browser automation (browser_* tools) to the model"
+        },
+        {
+          "name": "@goodandready/dsh-live-canvas",
+          "downloads": 6304,
+          "desc": "Interactive in-browser canvas for real-time preview of HTML, React components, SVGs, and diagrams with SSE hot"
+        },
+        {
+          "name": "dsh-browser",
+          "downloads": 6223,
+          "desc": "Browser automation for DeepSeek Harness: Playwright-powered open/click/type/screenshot/eval tools so the agent"
+        }
+      ]
+    },
+    "docker/podman 后端": {
+      "matches": 4,
+      "top": [
+        {
+          "name": "dsh-plugin-aitelier",
+          "downloads": 1540,
+          "desc": "Use AItelier as a subagent from DeepSeek Harness: generate, edit, run, export and import SkillFlow pipelines. "
+        },
+        {
+          "name": "dsh-github-intelligence",
+          "downloads": 770,
+          "desc": "The most comprehensive developer-intelligence integration for DeepSeek Harness: 195+ read-only tools across Gi"
+        },
+        {
+          "name": "dsh-1panel-ops",
+          "downloads": 204,
+          "desc": "1Panel ops assistant for DeepSeek Harness: mount the whole server environment (probe/fs/shell) and drive 1Pane"
+        },
+        {
+          "name": "dsh-plugin-docker",
+          "downloads": 135,
+          "desc": "Docker Micro-Dashboard, AI Container Inspector & 1-Click Prune Plugin for DeepSeek Harness"
+        }
+      ]
+    },
+    "容器化沙箱后端": {
+      "matches": 1,
+      "top": [
+        {
+          "name": "dsh-plugin-security-audit",
+          "downloads": 91,
+          "desc": "DeepSeek Harness plugin: run a live security health check on the deployment (credential file permissions, proc"
+        }
+      ]
+    },
+    "microVM/gVisor/Firecracker": {
+      "matches": 1,
+      "top": [
+        {
+          "name": "@neevcloud/dsh-sandbox",
+          "downloads": 636,
+          "desc": "NeevSandbox execution providers for DeepSeek Harness"
+        }
+      ]
+    },
+    "Windows 原生沙箱原语": {
+      "matches": 0,
+      "top": []
+    },
+    "WSL 作为执行后端": {
+      "matches": 9,
+      "top": [
+        {
+          "name": "dsh-win32",
+          "downloads": 10845,
+          "desc": "Fix and diagnose DeepSeek Harness on native Windows. Official PowerShell, Workspace Write, shortcuts, and lega"
+        },
+        {
+          "name": "@omdp/dsh-gitbash-win",
+          "downloads": 1068,
+          "desc": "Git Bash tool plugin for DeepSeek Harness on Windows: registers a global `gitbash` tool that runs commands via"
+        },
+        {
+          "name": "dsh-wsl-tray",
+          "downloads": 836,
+          "desc": "DSH plugin: Windows desktop shortcut and system-tray launcher for DSH running in WSL"
+        },
+        {
+          "name": "dsh-wsl-expose",
+          "downloads": 594,
+          "desc": "Expose the DeepSeek Harness Web GUI to the public internet from WSL2 over IPv6 or IPv4 through a reverse proxy"
+        },
+        {
+          "name": "dsh-network-settings",
+          "downloads": 562,
+          "desc": "DSH Network Settings: Windows / WSL network status, diagnostics and safe repair for DeepSeek Harness."
+        }
+      ]
+    },
+    "多租户/RBAC/SSO": {
+      "matches": 4,
+      "top": [
+        {
+          "name": "dsh-teams",
+          "downloads": 432,
+          "desc": "Team access for the DeepSeek Harness (dsh) web UI: login wall + full HTTP/WebSocket reverse proxy. Zero depend"
+        },
+        {
+          "name": "dsh-oauth-newapi",
+          "downloads": 364,
+          "desc": "New API OAuth provider, account configuration, model discovery, and model adapter for DeepSeek Harness"
+        },
+        {
+          "name": "@eduwork/dsh-oidc",
+          "downloads": 301,
+          "desc": "Standards-based OIDC identity, enterprise API-key binding, declarative branding, and OpenAI-compatible model i"
+        },
+        {
+          "name": "dsh-multi-user",
+          "downloads": 254,
+          "desc": "Single-process multi-user workspace view partitioning for DeepSeek Harness: JWT-in-cookie login wall, per-user"
+        }
+      ]
+    },
+    "凭据/keychain 后端": {
+      "matches": 2,
+      "top": [
+        {
+          "name": "@dsh-enhanced/credentials-keychain",
+          "downloads": 444,
+          "desc": "An audited OS-keychain credential-handle service for trusted DeepSeek Harness plugins."
+        },
+        {
+          "name": "dsh-codex-keychain",
+          "downloads": 197,
+          "desc": "Unofficial ChatGPT OAuth provider for DeepSeek Harness with strict native OS keychain storage"
+        }
+      ]
+    },
+    "无障碍 a11y": {
+      "matches": 18,
+      "top": [
+        {
+          "name": "@kubor/dsh-bloom-theme",
+          "downloads": 4630,
+          "desc": "Bloom for DSH — 玻璃+莫兰迪主题。10 套 OKLCH 配色（雾蓝/朱砂/花瓣/涟漪/鼠尾草/暖石/青金/琥珀/极光/薰衣草），明暗自适应；磨砂玻璃面板默认常开；微动效 + 版本/更新指示。零依赖、Typ"
+        },
+        {
+          "name": "dsh-click",
+          "downloads": 2159,
+          "desc": "Cross-platform native desktop control tools for DeepSeek Harness (Windows first): screen_shot, screen_read (ac"
+        },
+        {
+          "name": "dsh-theme-plugin",
+          "downloads": 1893,
+          "desc": "中国传统色 DeepSeek Harness 主题包 · Chinese traditional color themes for DeepSeek Harness"
+        },
+        {
+          "name": "dsh-ivory",
+          "downloads": 1749,
+          "desc": "An unofficial Claude-inspired light/dark theme for DeepSeek Harness with responsive layout, safe Markdown prev"
+        },
+        {
+          "name": "dsh-pilot",
+          "downloads": 1156,
+          "desc": "Hands for your DeepSeek Harness agent — autonomous browser operation with a native permission model. Accessibi"
+        }
+      ]
+    },
+    "对象存储后端": {
+      "matches": 1,
+      "top": [
+        {
+          "name": "dsh-webfile",
+          "downloads": 435,
+          "desc": "S3, FDS & FTP file tools for DeepSeek Harness: 8 agent tools (list, stat, mkdir, delete, move, copy, download,"
+        }
+      ]
+    },
+    "数据库后端": {
+      "matches": 16,
+      "top": [
+        {
+          "name": "dsh-sql",
+          "downloads": 1084,
+          "desc": "DSH 工程师级数据库插件：sql_list/query/exec/schema/stats/health 六工具，SQLite/MySQL/PostgreSQL 三引擎、多连接、只读模式与写操作审批门、词法级只读保护、"
+        },
+        {
+          "name": "dsh-plugin-nlbi",
+          "downloads": 873,
+          "desc": "自然语言查询 + 商业智能报表插件 for DeepSeek Harness：在 dsh-mysql 连接底座之上，提供 Text2SQL 自然语言查库、15+ 图表类型、Dashboard 仪表盘、指标/维度管理、多维"
+        },
+        {
+          "name": "dsh-data-insight",
+          "downloads": 515,
+          "desc": "DSH (DeepSeek Harness) data-insight skill plugin: turn raw data (CSV / pasted table / SQL results / DuckDB) in"
+        },
+        {
+          "name": "@xcr1234/dsh-plugin-dbhub",
+          "downloads": 506,
+          "desc": "DSH plugin: manage dbhub database MCP servers from the settings panel; starts dbhub in-process (no npx) and ex"
+        },
+        {
+          "name": "@nnyc/dsh-sql",
+          "downloads": 460,
+          "desc": "DSH 工程师级数据库插件（修复版 fork）：sql_list/query/exec/schema/stats/health 六工具，SQLite/MySQL/PostgreSQL 三引擎、多连接、只读模式与写操作审批"
+        }
+      ]
+    }
+  }
+}

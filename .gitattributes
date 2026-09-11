@@ -1,0 +1,19 @@
+# 统一换行符，避免 Windows/macOS/Linux 协作出噪音
+* text=auto
+
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.ico binary
