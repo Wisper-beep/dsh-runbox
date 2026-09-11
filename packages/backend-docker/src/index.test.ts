@@ -333,19 +333,24 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
     }
   })
 
-  it('terminate 按进程树终止：长命令能被叫停', async () => {
+  it('terminate 按进程树终止：逃逸的孙进程留不下痕迹', async () => {
     const backend = new DockerBackend({ image })
     const hostDir = mkdtempSync(join(tmpdir(), 'runbox-kill-'))
+    const marker = join(hostDir, 'survived.txt')
     let box: BoxHandle | undefined
     try {
       box = await backend.create(makeSpec('it-kill', hostDir))
+      // 两层进程，并且**让进程树自己留下证据**：若没被真正终止，
+      // sleep 结束后会写出 survived.txt。
+      //
+      // 刻意不用 `pgrep -f` 判定存活：`pgrep -f "sleep 120"` 会匹配到运行它
+      // 自己的那个 bash（命令行里就含这串字），于是永远报 alive。判定"进程还在
+      // 不在"必须用行为证据，不能用模式匹配。
       const stream = await backend.startExec(box, {
-        // 刻意造出两层：bash 是直接子进程，sleep 是它的子进程。
-        // 只杀直接子进程的实现会在这里露馅——sleep 会被 reparent 后继续跑。
-        argv: ['bash', '-c', 'sleep 120 & wait'],
+        argv: ['bash', '-c', `sleep 4; echo survived > ${marker}`],
         cwd: hostDir,
       })
-      // 包装脚本是异步起跑的，给 pid 文件写入留出时间。
+      // 给包装脚本写 pid 文件留出时间。
       await new Promise((resolve) => setTimeout(resolve, 800))
       stream.terminate()
       const exited = await Promise.race([
@@ -353,12 +358,13 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15_000)),
       ])
       assert.equal(exited, true, 'terminate 之后进程应当停下来')
-      // 必须验证"真的不在跑了"，而不是只信 waitForExit 的返回值。
-      const still = await backend.exec(box, {
-        argv: ['bash', '-c', 'pgrep -f "sleep 120" >/dev/null && echo alive || echo gone'],
-        cwd: hostDir,
-      })
-      assert.match(still.stdout, /gone/)
+      // 等到原命令本该写出文件的时间点之后，确认它从未发生。
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+      assert.equal(
+        existsSync(marker),
+        false,
+        '进程树没被真正终止——逃逸的进程写出了 survived.txt',
+      )
     } finally {
       if (box) {
         await backend.remove(box)
