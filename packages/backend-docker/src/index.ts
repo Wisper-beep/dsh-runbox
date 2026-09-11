@@ -11,6 +11,8 @@
  * @module @dsh-runbox/backend-docker
  */
 
+import { PassThrough } from 'node:stream'
+
 import type { Context } from '@deepseek-ai/cordis'
 
 import {
@@ -19,6 +21,7 @@ import {
   type BoxBackend,
   type BoxExecRequest,
   type BoxExecResult,
+  type BoxExecStream,
   type BoxHandle,
   type BoxSpec,
 } from '@dsh-runbox/core'
@@ -30,6 +33,8 @@ import {
   describeEndpoint,
   effectiveTmpfsPaths,
   engineRequest,
+  engineStream,
+  FrameDemuxer,
   LABELS,
   selectEndpoint,
   type EngineEndpoint,
@@ -42,6 +47,7 @@ export {
   describeEndpoint,
   effectiveTmpfsPaths,
   EngineError,
+  FrameDemuxer,
   isAtOrUnder,
   parseDockerHost,
   pingEndpoint,
@@ -77,6 +83,34 @@ const DEFAULT_MEMORY_BYTES = 1024 * 1024 * 1024
 
 /** 默认 CPU 核数。 */
 const DEFAULT_CPUS = 1
+
+/**
+ * 我方运行时目录：pid 文件与 stdin 暂存都放这里。
+ *
+ * 刻意**不在工作区里**——内部状态写进用户仓库是不可接受的；也刻意放在 tmpfs
+ * 上，因为 rootfs 是只读的，只有 tmpfs 可写。
+ */
+export const RUNBOX_RUNTIME_DIR = '/runbox'
+
+/**
+ * 推导箱内可写的运行时目录。
+ *
+ * 正常情况下就是 `/runbox`；只有当它与工作区发生重叠而被 `effectiveTmpfsPaths`
+ * 剔除时（比如工作区就是 `/`），才回落到 `/tmp` 或 `/run`。
+ *
+ * @param spec - 建箱时的规格。
+ * @returns 本次箱内可用的运行时目录。
+ */
+export function runtimeDirFor(spec: BoxSpec): string {
+  const effective = effectiveTmpfsPaths(
+    [...spec.confinement.tmpfsPaths, RUNBOX_RUNTIME_DIR],
+    spec.workspaceMountPath,
+  )
+  if (effective.includes(RUNBOX_RUNTIME_DIR)) {
+    return RUNBOX_RUNTIME_DIR
+  }
+  return effective.find((path) => path === '/tmp' || path === '/run') ?? '/tmp'
+}
 
 /** Windows 容器引擎拒绝建箱时的说明。 */
 const THIS_MUST_BE_LINUX_MESSAGE =
@@ -117,6 +151,7 @@ export class DockerBackend implements BoxBackend {
   readonly #candidates: EngineEndpoint[]
   readonly #timeoutMs: number
   readonly #image: string
+  readonly #specs = new Map<string, BoxSpec>()
   #endpoint: EngineEndpoint | undefined
   #engineOs: string | undefined
   #lastProbeDetail = 'not probed yet'
@@ -237,10 +272,16 @@ export class DockerBackend implements BoxBackend {
     const mountSuffix = confinement.workspaceReadOnly ? ':ro' : ':rw'
     // 与工作区重叠的 tmpfs 路径必须剔除，否则后挂的 tmpfs 会盖住工作区，
     // 而且不报错。详见 effectiveTmpfsPaths 的说明。
-    const tmpfsPaths = effectiveTmpfsPaths(confinement.tmpfsPaths, spec.workspaceMountPath)
+    //
+    // RUNBOX_RUNTIME_DIR 是我们自己的运行时目录（pid 文件、stdin 暂存），
+    // 必须可写且**不能落在工作区里**——否则会把内部状态写进用户的仓库。
+    const tmpfsPaths = effectiveTmpfsPaths(
+      [...confinement.tmpfsPaths, RUNBOX_RUNTIME_DIR],
+      spec.workspaceMountPath,
+    )
     const tmpfs: Record<string, string> = {}
     for (const path of tmpfsPaths) {
-      tmpfs[path] = 'rw,size=256m'
+      tmpfs[path] = path === RUNBOX_RUNTIME_DIR ? 'rw,size=16m,mode=1777' : 'rw,size=256m'
     }
 
     const created = await this.#call(
@@ -288,6 +329,7 @@ export class DockerBackend implements BoxBackend {
 
     try {
       await this.#call('POST', `/containers/${id}/start`, undefined, this.#timeoutMs * 5)
+      this.#specs.set(id, spec)
       return { ...handle, state: 'running' }
     } catch (error) {
       await this.#call('DELETE', `/containers/${id}?force=1&v=1`).catch(() => undefined)
@@ -357,6 +399,166 @@ export class DockerBackend implements BoxBackend {
     }
   }
 
+  /**
+   * 启动一次**流式**执行并立即返回活句柄。
+   *
+   * 与批式 `exec()` 的区别是语义上的，不是性能上的：`spawn` 的契约要求
+   * "立即返回一个活句柄"，所以不能等进程结束。
+   *
+   * 进程树终止靠 pid 文件：argv 被包了一层，真实进程的 pid 落在我方运行时
+   * 目录里（tmpfs，且刻意不在工作区内）。`exec` 后 shell 被替换掉，因此记下的
+   * pid 就是目标进程本身的 pid；Docker 的 exec 会话让它成为进程组首进程，
+   * 于是 `kill -TERM -<pid>` 就是**按进程树**终止。
+   */
+  async startExec(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecStream> {
+    const spec = this.#specs.get(box.id)
+    const runtimeDir = spec ? runtimeDirFor(spec) : RUNBOX_RUNTIME_DIR
+    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    const pidFile = `${runtimeDir}/${nonce}.pid`
+
+    // 批式 stdin：把内容先落到箱内的临时文件，再用重定向喂给命令。
+    // 这样不需要 hijack 连接（那是 M3 的交互式 stdin 才需要的），
+    // 而语义与 "写入这些字节后关闭 stdin" 完全一致。
+    let stdinPath: string | undefined
+    if (request.stdin !== undefined) {
+      stdinPath = `${runtimeDir}/${nonce}.stdin`
+      const payload = Buffer.from(request.stdin, 'utf8').toString('base64')
+      const seeded = await this.exec(box, {
+        argv: [
+          'bash',
+          '-c',
+          'printf %s "$1" | base64 -d > "$2"',
+          'dsh-runbox',
+          payload,
+          stdinPath,
+        ],
+        cwd: runtimeDir,
+      })
+      if (seeded.exitCode !== 0) {
+        throw new Error(`failed to stage stdin inside the box: ${seeded.stderr}`)
+      }
+    }
+
+    const redirect = stdinPath ? `< ${stdinPath}` : '< /dev/null'
+    const wrapped = [
+      'bash',
+      '-c',
+      `echo $$ > ${pidFile}; exec "$@" ${redirect}`,
+      'dsh-runbox',
+      ...request.argv,
+    ]
+    const env = request.env
+      ? Object.entries(request.env).map(([key, value]) => `${key}=${value}`)
+      : undefined
+
+    const created = await this.#call('POST', `/containers/${box.id}/exec`, {
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+      Cmd: wrapped,
+      WorkingDir: request.cwd,
+      ...(env ? { Env: env } : {}),
+    })
+    const execId = parseJson<{ Id?: string }>(created.body, 'exec/create').Id
+    if (!execId) {
+      throw new Error('docker engine did not return an exec id')
+    }
+
+    const endpoint = await this.#engine()
+    const response = await engineStream(
+      endpoint,
+      'POST',
+      `/exec/${execId}/start`,
+      { Detach: false, Tty: false },
+      request.signal,
+    )
+    if (response.statusCode !== 200) {
+      throw new Error(`docker engine refused exec start: HTTP ${String(response.statusCode)}`)
+    }
+
+    const stdout = new PassThrough()
+    const stderr = new PassThrough()
+    const demuxer = new FrameDemuxer(
+      (chunk) => stdout.write(chunk),
+      (chunk) => stderr.write(chunk),
+    )
+    response.on('data', (chunk: Buffer) => {
+      demuxer.push(chunk)
+    })
+
+    const done = new Promise<{ exitCode: number | null }>((resolve) => {
+      const settle = async (): Promise<void> => {
+        let exitCode: number | null = null
+        try {
+          const inspected = await this.#call('GET', `/exec/${execId}/json`)
+          exitCode = parseJson<ExecInspect>(inspected.body, 'exec/inspect').ExitCode ?? null
+        } catch {
+          // 连接断了就取不到退出码；如实报 null 而不是编一个
+        }
+        stdout.end()
+        stderr.end()
+        resolve({ exitCode })
+      }
+      response.on('end', () => void settle())
+      response.on('error', () => void settle())
+      response.on('close', () => void settle())
+    })
+
+    return {
+      stdout,
+      stderr,
+      done,
+      terminate: (): void => {
+        void this.#terminateTree(box, pidFile, request.timeoutMs ?? 5000)
+      },
+      waitForExit: async (signal?: AbortSignal): Promise<boolean> => {
+        if (!signal) {
+          await done
+          return true
+        }
+        return Promise.race([
+          done.then(() => true),
+          new Promise<boolean>((resolve) => {
+            if (signal.aborted) {
+              resolve(false)
+              return
+            }
+            signal.addEventListener('abort', () => resolve(false), { once: true })
+          }),
+        ])
+      },
+    }
+  }
+
+  /** 按进程树终止：先 SIGTERM，宽限期后 SIGKILL。 */
+  async #terminateTree(box: BoxHandle, pidFile: string, graceMs: number): Promise<void> {
+    const read = await this.exec(box, {
+      argv: ['bash', '-c', `cat ${pidFile} 2>/dev/null || true`],
+      cwd: RUNBOX_RUNTIME_DIR,
+    })
+    const pid = Number.parseInt(read.stdout.trim(), 10)
+    if (!Number.isFinite(pid) || pid <= 0) {
+      // 进程可能已经退出（pid 文件还没写就先挂了），此时终止无事可做。
+      return
+    }
+    await this.#signalTree(box, pid, 'TERM')
+    setTimeout(() => {
+      void this.#signalTree(box, pid, 'KILL')
+    }, graceMs)
+  }
+
+  /** 向进程组发信号；组不存在时回落到单个 pid。 */
+  async #signalTree(box: BoxHandle, pid: number, signal: 'TERM' | 'KILL'): Promise<void> {
+    await this.exec(box, {
+      argv: [
+        'bash',
+        '-c',
+        `kill -${signal} -${String(pid)} 2>/dev/null || kill -${signal} ${String(pid)} 2>/dev/null || true`,
+      ],
+      cwd: RUNBOX_RUNTIME_DIR,
+    })
+  }
+
   /** 停止箱。箱子可能已经停了——这不是错误。 */
   async stop(box: BoxHandle): Promise<void> {
     try {
@@ -385,6 +587,8 @@ export class DockerBackend implements BoxBackend {
       if (await this.#exists(box)) {
         throw error instanceof Error ? error : new Error(String(error))
       }
+    } finally {
+      this.#specs.delete(box.id)
     }
   }
 

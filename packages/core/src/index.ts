@@ -30,6 +30,7 @@ export type {
   BoxBackend,
   BoxExecRequest,
   BoxExecResult,
+  BoxExecStream,
   BoxHandle,
   BoxId,
   BoxLimits,

@@ -7,6 +7,8 @@
  * @module @dsh-runbox/core/types
  */
 
+import type { Readable } from 'node:stream'
+
 import type { BoxConfinement } from './policy.ts'
 
 /** 箱的稳定标识。 */
@@ -99,6 +101,25 @@ export interface BoxExecResult {
 }
 
 /**
+ * 一次**流式**执行的句柄。
+ *
+ * 与 `BoxExecResult` 的区别是语义上的：批式等进程结束再返回，流式边产生边交付。
+ * `ctx.subprocess` 的 `spawn` 契约要求"立即返回活句柄"，所以它需要这个。
+ */
+export interface BoxExecStream {
+  /** 标准输出（增量到达）；后端不支持分路时为 `undefined`。 */
+  readonly stdout?: Readable | undefined
+  /** 标准错误（增量到达）。 */
+  readonly stderr?: Readable | undefined
+  /** 进程结束后 resolve 出退出码；取不到时为 `null`（不编造）。 */
+  readonly done: Promise<{ exitCode: number | null }>
+  /** 按进程树终止：先 TERM，宽限期后 KILL。 */
+  terminate(): void
+  /** 等待进程树退出；`signal` 中断则返回 `false`。 */
+  waitForExit(signal?: AbortSignal): Promise<boolean>
+}
+
+/**
  * 后端契约。实现者只需要把这一组方法做对，上层 provider 就能复用。
  *
  * 注意 `probe()`：它是 fail-closed 的入口。registry 在选中后端前必须先探测，
@@ -119,6 +140,15 @@ export interface BoxBackend {
 
   /** 在箱内执行一次命令。 */
   exec(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecResult>
+
+  /**
+   * 在箱内启动一次**流式**执行并立即返回句柄。
+   *
+   * 声明为可选：不是每个后端都能做流式（有些只暴露批式接口）。缺失时
+   * `BoxManager.startExec()` 会抛错——**不允许**退化成"等结束再返回"，
+   * 那会静默改变 `spawn` 的语义。
+   */
+  startExec?(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecStream>
 
   /** 停止箱，但保留其身份以便回收与审计。 */
   stop(box: BoxHandle): Promise<void>

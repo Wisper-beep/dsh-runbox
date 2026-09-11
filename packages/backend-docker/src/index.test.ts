@@ -302,6 +302,93 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
       rmSync(hostDir, { recursive: true, force: true })
     }
   })
+
+  it('流式执行边产生边交付，退出码可读', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-stream-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-stream', hostDir))
+      const stream = await backend.startExec(box, {
+        argv: ['bash', '-c', 'echo first; echo second; echo oops >&2; exit 7'],
+        cwd: hostDir,
+      })
+      let stdout = ''
+      let stderr = ''
+      stream.stdout?.on('data', (chunk: string) => {
+        stdout += chunk
+      })
+      stream.stderr?.on('data', (chunk: string) => {
+        stderr += chunk
+      })
+      const outcome = await stream.done
+      assert.equal(outcome.exitCode, 7)
+      assert.match(stdout, /first[\s\S]*second/)
+      assert.match(stderr, /oops/)
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
+  it('terminate 按进程树终止：长命令能被叫停', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-kill-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-kill', hostDir))
+      const stream = await backend.startExec(box, {
+        argv: ['bash', '-c', 'sleep 120'],
+        cwd: hostDir,
+      })
+      // 包装脚本是异步起跑的，给 pid 文件写入留出时间。
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      stream.terminate()
+      const exited = await Promise.race([
+        stream.waitForExit().then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15_000)),
+      ])
+      assert.equal(exited, true, 'terminate 之后进程应当停下来')
+      // 必须验证"真的不在跑了"，而不是只信 waitForExit 的返回值。
+      const still = await backend.exec(box, {
+        argv: ['bash', '-c', 'pgrep -f "sleep 120" >/dev/null && echo alive || echo gone'],
+        cwd: hostDir,
+      })
+      assert.match(still.stdout, /gone/)
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
+  it('批式 stdin 被如实喂给命令', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-stdin-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-stdin', hostDir))
+      const stream = await backend.startExec(box, {
+        argv: ['bash', '-c', 'cat'],
+        cwd: hostDir,
+        stdin: 'fed-through-stdin\n',
+      })
+      let stdout = ''
+      stream.stdout?.on('data', (chunk: string) => {
+        stdout += chunk
+      })
+      await stream.done
+      assert.match(stdout, /fed-through-stdin/)
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('标签契约', () => {

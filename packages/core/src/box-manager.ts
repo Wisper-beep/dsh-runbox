@@ -12,7 +12,16 @@ import type { ConfinedSandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { BackendUnavailableError } from './errors.ts'
 import { confinementFor } from './policy.ts'
 import type { BackendRegistry } from './registry.ts'
-import type { BoxBackend, BoxExecRequest, BoxExecResult, BoxHandle, BoxLimits, BoxNetworkMode, BoxSpec } from './types.ts'
+import type {
+  BoxBackend,
+  BoxExecRequest,
+  BoxExecResult,
+  BoxExecStream,
+  BoxHandle,
+  BoxLimits,
+  BoxNetworkMode,
+  BoxSpec,
+} from './types.ts'
 
 /** 建箱时的默认值；逐会话可以按策略覆盖。 */
 export interface BoxDefaults {
@@ -85,6 +94,22 @@ export class BoxManager {
   async exec(request: BoxRequest, exec: BoxExecRequest): Promise<BoxExecResult> {
     const binding = await this.#bindingFor(request)
     return binding.backend.exec(binding.box, exec)
+  }
+
+  /**
+   * 在该会话的箱里启动一次流式执行。
+   *
+   * 后端不支持流式时抛错而不是退化成批式——退化成批式会静默改变
+   * "立即返回活句柄"的语义，调用方会以为自己在流式消费。
+   */
+  async startExec(request: BoxRequest, exec: BoxExecRequest): Promise<BoxExecStream> {
+    const binding = await this.#bindingFor(request)
+    if (!binding.backend.startExec) {
+      throw new BackendUnavailableError(
+        `backend '${binding.backend.name}' does not support streaming exec`,
+      )
+    }
+    return binding.backend.startExec(binding.box, exec)
   }
 
   /** 取绑定，不存在则创建。 */

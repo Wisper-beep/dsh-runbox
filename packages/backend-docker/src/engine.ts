@@ -7,7 +7,7 @@
  * @module @dsh-runbox/backend-docker/engine
  */
 
-import { request } from 'node:http'
+import { request, type IncomingMessage } from 'node:http'
 import { platform } from 'node:process'
 
 /** 一个引擎端点。 */
@@ -271,4 +271,89 @@ export function effectiveTmpfsPaths(
     (path) =>
       !isAtOrUnder(path, workspaceMountPath) && !isAtOrUnder(workspaceMountPath, path),
   )
+}
+
+/**
+ * 增量拆帧器。
+ *
+ * 与批式的 `demuxStream` 的关键区别：网络分片**不保证帧对齐**，一次 `data`
+ * 事件可能只包含半个帧头，也可能横跨两帧。批式版本只能处理已完整的内存缓冲，
+ * 因此流式路径必须有这个能跨 chunk 保留残余的版本。
+ */
+export class FrameDemuxer {
+  #pending: Buffer<ArrayBufferLike> = Buffer.alloc(0)
+  readonly #onStdout: (chunk: string) => void
+  readonly #onStderr: (chunk: string) => void
+
+  constructor(onStdout: (chunk: string) => void, onStderr: (chunk: string) => void) {
+    this.#onStdout = onStdout
+    this.#onStderr = onStderr
+  }
+
+  /**
+   * 送入一个网络分片：完整帧立即回调，残余留到下一片。
+   * @param chunk - 本次收到的字节。
+   */
+  push(chunk: Buffer): void {
+    this.#pending = this.#pending.length === 0 ? chunk : Buffer.concat([this.#pending, chunk])
+    let offset = 0
+    while (offset + 8 <= this.#pending.length) {
+      const streamType = this.#pending[offset] ?? 0
+      const size = this.#pending.readUInt32BE(offset + 4)
+      if (offset + 8 + size > this.#pending.length) {
+        break
+      }
+      const payload = this.#pending.subarray(offset + 8, offset + 8 + size).toString('utf8')
+      if (streamType === 1) {
+        this.#onStdout(payload)
+      } else if (streamType === 2) {
+        this.#onStderr(payload)
+      }
+      offset += 8 + size
+    }
+    if (offset > 0) {
+      this.#pending = this.#pending.subarray(offset)
+    }
+  }
+}
+
+/**
+ * 发起调用并拿到**未缓冲**的响应流。
+ *
+ * 流式路径必须用它：`docker exec` 的输出边产生边到达，等全部收完再返回
+ * 就等于把流式执行退化成批式执行，`spawn` 的"立即返回活句柄"就无从谈起。
+ */
+export function engineStream(
+  endpoint: EngineEndpoint,
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body)
+    const headers: Record<string, string> = {}
+    if (payload !== undefined) {
+      headers['content-type'] = 'application/json'
+      headers['content-length'] = String(Buffer.byteLength(payload))
+    }
+    const base =
+      endpoint.kind === 'socket'
+        ? { socketPath: endpoint.socketPath }
+        : { host: endpoint.host, port: endpoint.port }
+
+    const req = request({ ...base, path, method, headers }, resolve)
+    const abort = (): void => {
+      req.destroy(new Error('request aborted'))
+    }
+    if (signal) {
+      if (signal.aborted) {
+        abort()
+      } else {
+        signal.addEventListener('abort', abort, { once: true })
+      }
+    }
+    req.on('error', reject)
+    req.end(payload)
+  })
 }
