@@ -120,11 +120,10 @@ export class RunboxSubprocessService extends SubprocessService {
    * 之后把后台流接上。若建连失败，`done` 以 spawn 级失败 reject。
    */
   override spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
-    if (spec.stdio.stdin === 'pipe') {
-      throw new RunboxNotImplementedError('SubprocessSpawnSpec.stdio.stdin = \'pipe\'', 'M3')
-    }
+    // stdin 的三种处置由箱后端直接支持；交互式那条走连接劫持。
     const request = this.#requestFor(spec.cwd)
 
+    const stdinPipe = spec.stdio.stdin === 'pipe' ? new PassThrough() : undefined
     const stdoutPipe = spec.stdio.stdout === 'pipe' ? new PassThrough() : undefined
     const stderrPipe = spec.stdio.stderr === 'pipe' ? new PassThrough() : undefined
     const stdoutCollect =
@@ -154,10 +153,15 @@ export class RunboxSubprocessService extends SubprocessService {
         argv: [...spec.argv],
         cwd: spec.cwd,
         ...(Object.keys(boxEnv).length > 0 ? { env: boxEnv } : {}),
-        ...(typeof spec.stdio.stdin === 'object' ? { stdin: spec.stdio.stdin.data } : {}),
+        stdin: spec.stdio.stdin,
         ...(spec.signal ? { signal: spec.signal } : {}),
       })
       terminate = stream.terminate
+      if (stdinPipe && stream.stdin) {
+        // 箱的 stdin 是异步建好的；调用方拿到的管道同步就存在，这里接上。
+        stdinPipe.on('data', (chunk: Buffer) => stream.stdin?.write(chunk))
+        stdinPipe.on('end', () => stream.stdin?.end())
+      }
       waitForExit = (signal?: AbortSignal): Promise<boolean> => stream.waitForExit(signal)
       this.#live.add(stream.terminate)
 
@@ -195,7 +199,7 @@ export class RunboxSubprocessService extends SubprocessService {
       // 箱内 pid 对宿主没有意义，且宿主无法用 process.kill 触达它。
       // 契约允许 -1（"spawn 本身失败"之外的场合也只有一个终止动词可用）。
       pid: -1,
-      stdin: undefined,
+      stdin: stdinPipe,
       stdout: stdoutPipe,
       stderr: stderrPipe,
       collected,

@@ -7,7 +7,7 @@
  * @module @dsh-runbox/core/types
  */
 
-import type { Readable } from 'node:stream'
+import type { Readable, Writable } from 'node:stream'
 
 import type { BoxConfinement } from './policy.ts'
 
@@ -72,6 +72,15 @@ export interface BoxHandle {
   readonly createdAt: number
 }
 
+/**
+ * 标准输入的处置。
+ *
+ * 词汇刻意与官方 `SubprocessStdinMode` 对齐，这样 provider 之间是直接映射，而不是
+ * 一堆 if：`'ignore'` 让 fd 0 指向 `/dev/null`；`{ data }` 写入这些字节后关闭
+ * （批式）；`'pipe'` 把可写流交给调用方持续写入（交互式，需要 hijack 连接）。
+ */
+export type BoxStdinMode = 'ignore' | { readonly data: string } | 'pipe'
+
 /** 一次箱内执行请求。 */
 export interface BoxExecRequest {
   /** 要执行的确切 argv；`argv[0]` 是程序，永不经 shell 解释。 */
@@ -80,8 +89,8 @@ export interface BoxExecRequest {
   readonly cwd: string
   /** 追加的环境变量。 */
   readonly env?: Readonly<Record<string, string>> | undefined
-  /** 标准输入内容；缺省即关闭 stdin。 */
-  readonly stdin?: string | undefined
+  /** 标准输入处置；缺省等同 `'ignore'`。 */
+  readonly stdin?: BoxStdinMode | undefined
   /** 超时（毫秒）。超时由调用方判定，本层只负责终止进程树。 */
   readonly timeoutMs?: number | undefined
   /** 取消信号。 */
@@ -111,6 +120,12 @@ export interface BoxExecStream {
   readonly stdout?: Readable | undefined
   /** 标准错误（增量到达）。 */
   readonly stderr?: Readable | undefined
+  /**
+   * 标准输入（仅当请求了 `stdin: 'pipe'` 时存在）。
+   *
+   * 调用方向它写入，`end()` 即半关闭——也就是"我说完了"的语义，而不是杀进程。
+   */
+  readonly stdin?: Writable | undefined
   /** 进程结束后 resolve 出退出码；取不到时为 `null`（不编造）。 */
   readonly done: Promise<{ exitCode: number | null }>
   /** 按进程树终止：先 TERM，宽限期后 KILL。 */

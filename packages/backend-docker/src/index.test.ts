@@ -384,6 +384,59 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
     }
   })
 
+  it('交互式 stdin：边写边读，end() 即半关闭', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-stdin-pipe-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-stdin-pipe', hostDir))
+      const stream = await backend.startExec(box, {
+        argv: ['bash', '-c', 'cat'],
+        cwd: hostDir,
+        stdin: 'pipe',
+      })
+      assert.ok(stream.stdin, "请求 stdin: 'pipe' 时必须给出可写流")
+      let stdout = ''
+      stream.stdout?.on('data', (chunk: string) => {
+        stdout += chunk
+      })
+      stream.stdin?.write('line-one\n')
+      stream.stdin?.write('line-two\n')
+      stream.stdin?.end()
+      await stream.done
+      assert.match(stdout, /line-one/)
+      assert.match(stdout, /line-two/, '两行都写到了才算真的双向通了')
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
+  it('批式 exec 明确拒绝 stdin: pipe——静默忽略会让调用方以为在交互', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-stdin-reject-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-stdin-reject', hostDir))
+      await assert.rejects(
+        () =>
+          backend.exec(box as BoxHandle, {
+            argv: ['bash', '-c', 'cat'],
+            cwd: hostDir,
+            stdin: 'pipe',
+          }),
+        /use startExec/
+      )
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
   it('批式 stdin 被如实喂给命令', async () => {
     const backend = new DockerBackend({ image })
     const hostDir = mkdtempSync(join(tmpdir(), 'runbox-stdin-'))
@@ -393,7 +446,7 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
       const stream = await backend.startExec(box, {
         argv: ['bash', '-c', 'cat'],
         cwd: hostDir,
-        stdin: 'fed-through-stdin\n',
+        stdin: { data: 'fed-through-stdin\n' },
       })
       let stdout = ''
       stream.stdout?.on('data', (chunk: string) => {

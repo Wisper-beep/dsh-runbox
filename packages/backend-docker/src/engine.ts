@@ -8,6 +8,7 @@
  */
 
 import { request, type IncomingMessage } from 'node:http'
+import type { Duplex } from 'node:stream'
 import { platform } from 'node:process'
 
 import { isAtOrUnder } from '@dsh-runbox/core'
@@ -225,6 +226,79 @@ export async function selectEndpoint(
     tried.push(`${describeEndpoint(endpoint)} (${result.detail})`)
   }
   return { tried }
+}
+
+/** 一条被劫持的全双工连接。 */
+export interface HijackedConnection {
+  /** 与引擎的原始 socket：写入即为 stdin，读取即为多路复用输出。 */
+  readonly socket: Duplex
+  /** 升级响应的状态码。 */
+  readonly status: number
+  /** 升级前已经到达的残余字节。 */
+  readonly head: Buffer
+}
+
+/**
+ * 发起调用并**劫持连接**。
+ *
+ * 这是交互式 stdin 的唯一途径：普通的 HTTP 响应只能单向读，而 `stdin: 'pipe'`
+ * 要求调用方在进程运行期间持续写入。Docker 的做法是 `Upgrade: tcp`，升级成功后
+ * 整条连接变成裸字节流（stdin 不参与多路复用，stdout/stderr 仍然带帧头）。
+ *
+ * 服务端拒绝升级时会走 `response` 分支——那种情况必须当成错误抛出，否则调用方
+ * 会拿着一条永远不会有数据来的连接空等。
+ */
+export function engineHijack(
+  endpoint: EngineEndpoint,
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<HijackedConnection> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body)
+    const headers: Record<string, string> = {
+      connection: 'Upgrade',
+      upgrade: 'tcp',
+    }
+    if (payload !== undefined) {
+      headers['content-type'] = 'application/json'
+      headers['content-length'] = String(Buffer.byteLength(payload))
+    }
+    const base =
+      endpoint.kind === 'socket'
+        ? { socketPath: endpoint.socketPath }
+        : { host: endpoint.host, port: endpoint.port }
+
+    const req = request({ ...base, path, method, headers })
+    req.on('upgrade', (res, socket: Duplex, head: Buffer) => {
+      resolve({ socket, status: res.statusCode ?? 0, head })
+    })
+    req.on('response', (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      res.on('end', () => {
+        reject(
+          new EngineError(
+            res.statusCode ?? 0,
+            Buffer.concat(chunks).toString('utf8').slice(0, 400),
+          ),
+        )
+      })
+    })
+    const abort = (): void => {
+      req.destroy(new Error('request aborted'))
+    }
+    if (signal) {
+      if (signal.aborted) {
+        abort()
+      } else {
+        signal.addEventListener('abort', abort, { once: true })
+      }
+    }
+    req.on('error', reject)
+    req.end(payload)
+  })
 }
 
 /** 容器名只允许 `[a-zA-Z0-9][a-zA-Z0-9_.-]*`，会话 id 需要清洗。 */

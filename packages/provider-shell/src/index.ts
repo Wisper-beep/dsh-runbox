@@ -164,7 +164,7 @@ export class RunboxShellExecutor extends ShellExecutor {
       argv: ['bash', '-lc', spec.command],
       cwd: spec.workdir,
       ...(Object.keys(env).length > 0 ? { env } : {}),
-      ...(spec.stdin === undefined ? {} : { stdin: spec.stdin }),
+      ...(spec.stdin === undefined ? {} : { stdin: { data: spec.stdin } }),
       timeoutMs: spec.timeoutMs,
       signal: spec.signal,
     })

@@ -44,6 +44,7 @@ export type {
   BoxNetworkMode,
   BoxSpec,
   BoxState,
+  BoxStdinMode,
 } from './types.ts'
 
 /** 建箱默认值：镜像 / 网络 / 资源。 */

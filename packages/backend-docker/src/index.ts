@@ -33,6 +33,7 @@ import {
   describeEndpoint,
   effectiveTmpfsPaths,
   engineRequest,
+  engineHijack,
   engineStream,
   FrameDemuxer,
   LABELS,
@@ -347,6 +348,10 @@ export class DockerBackend implements BoxBackend {
    * 一个超时命令最迟会随箱的销毁而结束。
    */
   async exec(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecResult> {
+    if (request.stdin === 'pipe') {
+      // 批式路径没有可写流可给，静默忽略会让调用方以为自己在交互。
+      throw new Error("batch exec cannot use stdin: 'pipe' — use startExec() instead")
+    }
     const env = request.env
       ? Object.entries(request.env).map(([k, v]) => `${k}=${v}`)
       : undefined
@@ -417,13 +422,15 @@ export class DockerBackend implements BoxBackend {
     const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     const pidFile = `${runtimeDir}/${nonce}.pid`
 
-    // 批式 stdin：把内容先落到箱内的临时文件，再用重定向喂给命令。
-    // 这样不需要 hijack 连接（那是 M3 的交互式 stdin 才需要的），
-    // 而语义与 "写入这些字节后关闭 stdin" 完全一致。
+    const wantsStdinPipe = request.stdin === 'pipe'
+
+    // 批式 stdin：把内容先落到箱内的临时文件，再用重定向喂给命令。这样不需要
+    // hijack 连接，而语义与"写入这些字节后关闭 stdin"完全一致。交互式 stdin
+    // （`'pipe'`）走另一条路——那条必须劫持连接，见下面的分支。
     let stdinPath: string | undefined
-    if (request.stdin !== undefined) {
+    if (typeof request.stdin === 'object') {
       stdinPath = `${runtimeDir}/${nonce}.stdin`
-      const payload = Buffer.from(request.stdin, 'utf8').toString('base64')
+      const payload = Buffer.from(request.stdin.data, 'utf8').toString('base64')
       const seeded = await this.exec(box, {
         argv: [
           'bash',
@@ -453,6 +460,7 @@ export class DockerBackend implements BoxBackend {
       : undefined
 
     const created = await this.#call('POST', `/containers/${box.id}/exec`, {
+      AttachStdin: wantsStdinPipe,
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
@@ -466,26 +474,70 @@ export class DockerBackend implements BoxBackend {
     }
 
     const endpoint = await this.#engine()
-    const response = await engineStream(
-      endpoint,
-      'POST',
-      `/exec/${execId}/start`,
-      { Detach: false, Tty: false },
-      request.signal,
-    )
-    if (response.statusCode !== 200) {
-      throw new Error(`docker engine refused exec start: HTTP ${String(response.statusCode)}`)
-    }
-
     const stdout = new PassThrough()
     const stderr = new PassThrough()
     const demuxer = new FrameDemuxer(
       (chunk) => stdout.write(chunk),
       (chunk) => stderr.write(chunk),
     )
-    response.on('data', (chunk: Buffer) => {
-      demuxer.push(chunk)
-    })
+
+    // 交互式 stdin 必须劫持连接：普通响应只能单向读，而 `'pipe'` 要求调用方在
+    // 进程运行期间持续写入。劫持之后整条连接是裸字节流，stdin 不参与多路复用，
+    // 读到的部分仍然带帧头，所以还是喂给同一个拆帧器。
+    let stdinPipe: PassThrough | undefined
+    let onData: (chunk: Buffer) => void
+    let completion: Promise<void>
+
+    if (wantsStdinPipe) {
+      const hijacked = await engineHijack(
+        endpoint,
+        'POST',
+        `/exec/${execId}/start`,
+        { Detach: false, Tty: false },
+        request.signal,
+      )
+      if (hijacked.head.length > 0) {
+        demuxer.push(hijacked.head)
+      }
+      hijacked.socket.on('data', (chunk: Buffer) => {
+        demuxer.push(chunk)
+      })
+      stdinPipe = new PassThrough()
+      stdinPipe.on('data', (chunk: Buffer) => {
+        hijacked.socket.write(chunk)
+      })
+      // 半关闭：告诉箱里"输入到此为止"，而不是杀进程。
+      stdinPipe.on('end', () => {
+        hijacked.socket.end()
+      })
+      onData = () => undefined
+      completion = new Promise<void>((resolve) => {
+        hijacked.socket.on('end', () => resolve())
+        hijacked.socket.on('close', () => resolve())
+        hijacked.socket.on('error', () => resolve())
+      })
+    } else {
+      const response = await engineStream(
+        endpoint,
+        'POST',
+        `/exec/${execId}/start`,
+        { Detach: false, Tty: false },
+        request.signal,
+      )
+      if (response.statusCode !== 200) {
+        throw new Error(`docker engine refused exec start: HTTP ${String(response.statusCode)}`)
+      }
+      onData = (chunk: Buffer) => {
+        demuxer.push(chunk)
+      }
+      response.on('data', onData)
+      completion = new Promise<void>((resolve) => {
+        response.on('end', () => resolve())
+        response.on('close', () => resolve())
+        response.on('error', () => resolve())
+      })
+    }
+    void onData
 
     const done = new Promise<{ exitCode: number | null }>((resolve) => {
       const settle = async (): Promise<void> => {
@@ -498,16 +550,16 @@ export class DockerBackend implements BoxBackend {
         }
         stdout.end()
         stderr.end()
+        stdinPipe?.end()
         resolve({ exitCode })
       }
-      response.on('end', () => void settle())
-      response.on('error', () => void settle())
-      response.on('close', () => void settle())
+      void completion.then(() => settle())
     })
 
     return {
       stdout,
       stderr,
+      ...(stdinPipe ? { stdin: stdinPipe } : {}),
       done,
       terminate: (): void => {
         void this.#terminateTree(box, pidFile, request.timeoutMs ?? 5000)
