@@ -155,6 +155,8 @@ export class DockerBackend implements BoxBackend {
   #endpoint: EngineEndpoint | undefined
   #engineOs: string | undefined
   #lastProbeDetail = 'not probed yet'
+  /** 最近一次终止尝试的结论，供诊断；空白表示还没终止过。 */
+  lastTerminateDetail = ''
 
   constructor(options: {
     endpoints?: EngineEndpoint[]
@@ -529,21 +531,89 @@ export class DockerBackend implements BoxBackend {
     }
   }
 
+  /**
+   * 读取包装脚本写下的 pid，**轮询而不是单次读取**。
+   *
+   * 单次读取有过真实的失败模式（CI 上两次运行结果不同）：调用方在 pid 文件就绪前
+   * 触发终止，于是它静默什么都不做。轮询把这个窗口收窄到"进程确实没起来"，
+   * 而那本来就无事可做。
+   *
+   * @param box - 目标箱。
+   * @param pidFile - 包装脚本写入 pid 的路径。
+   * @param budgetMs - 等待预算。
+   * @returns 目标进程的 pid；预算内始终拿不到时返回 `undefined`。
+   */
+  async #readPidFile(
+    box: BoxHandle,
+    pidFile: string,
+    budgetMs = 3000,
+  ): Promise<number | undefined> {
+    const deadline = Date.now() + budgetMs
+    for (;;) {
+      const read = await this.exec(box, {
+        argv: ['bash', '-c', `cat ${pidFile} 2>/dev/null || true`],
+        cwd: RUNBOX_RUNTIME_DIR,
+      })
+      const pid = Number.parseInt(read.stdout.trim(), 10)
+      if (Number.isFinite(pid) && pid > 0) {
+        return pid
+      }
+      if (Date.now() >= deadline) {
+        return undefined
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+
   /** 按进程树终止：先 SIGTERM，宽限期后 SIGKILL。 */
   async #terminateTree(box: BoxHandle, pidFile: string, graceMs: number): Promise<void> {
-    const read = await this.exec(box, {
-      argv: ['bash', '-c', `cat ${pidFile} 2>/dev/null || true`],
-      cwd: RUNBOX_RUNTIME_DIR,
-    })
-    const pid = Number.parseInt(read.stdout.trim(), 10)
-    if (!Number.isFinite(pid) || pid <= 0) {
-      // 进程可能已经退出（pid 文件还没写就先挂了），此时终止无事可做。
+    const pid = await this.#readPidFile(box, pidFile)
+    if (pid === undefined) {
+      // 连 pid 都拿不到：要么进程早已退出（无事可做，正确），要么包装脚本还没跑到
+      // 写 pid 那一步。后者曾经被静默吞掉——调用方以为叫停了，进程却继续跑到底。
+      // 这里如实记下结论而不是假装成功，便于上层与日志归因。
+      this.lastTerminateDetail = `box ${box.id}: no pid resolvable within budget`
       return
     }
+    this.lastTerminateDetail = `box ${box.id}: signalling ${String(pid)}`
     await this.#signalTree(box, pid, 'TERM')
     setTimeout(() => {
       void this.#signalTree(box, pid, 'KILL')
     }, graceMs)
+  }
+
+  /**
+   * 读取包装脚本写下的 pid，**轮询而不是单次读取**。
+   *
+   * 单次读取有过真实的失败模式（CI 上两次运行结果不同）：调用方在 pid 文件就绪前
+   * 触发终止，于是它静默什么都不做。轮询把这个窗口收窄到"进程确实没起来"，
+   * 而那本来就无事可做。
+   *
+   * @param box - 目标箱。
+   * @param pidFile - 包装脚本写入 pid 的路径。
+   * @param budgetMs - 等待预算。
+   * @returns 目标进程的 pid；预算内始终拿不到时返回 `undefined`。
+   */
+  async #readPidFile(
+    box: BoxHandle,
+    pidFile: string,
+    budgetMs = 3000,
+  ): Promise<number | undefined> {
+    const deadline = Date.now() + budgetMs
+    for (;;) {
+      const read = await this.exec(box, {
+        argv: ['bash', '-c', `cat ${pidFile} 2>/dev/null || true`],
+        cwd: RUNBOX_RUNTIME_DIR,
+      })
+      const pid = Number.parseInt(read.stdout.trim(), 10)
+      if (Number.isFinite(pid) && pid > 0) {
+        return pid
+      }
+      if (Date.now() >= deadline) {
+        return undefined
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
   }
 
   /**

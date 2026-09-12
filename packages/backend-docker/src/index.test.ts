@@ -350,8 +350,19 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
         argv: ['bash', '-c', `sleep 4; echo survived > ${marker}`],
         cwd: hostDir,
       })
-      // 给包装脚本写 pid 文件留出时间。
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      // 等到包装脚本把 pid 写出来再终止。固定 sleep 在负载高的 runner 上会偶发
+      // 失败（CI 上真的出现过两次运行结果不同）。这里确定性等待，是因为要测的是
+      // "终止能做到"，而不是"终止能容忍进程还没起来"。
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const probe = await backend.exec(box, {
+          argv: ['bash', '-c', 'ls /runbox/*.pid 2>/dev/null | head -1'],
+          cwd: hostDir,
+        })
+        if (probe.stdout.trim().length > 0) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
       stream.terminate()
       const exited = await Promise.race([
         stream.waitForExit().then(() => true),

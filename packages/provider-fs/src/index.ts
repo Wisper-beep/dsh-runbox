@@ -26,7 +26,7 @@
 
 import { createReadStream } from 'node:fs'
 import { lstat, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve as resolvePath } from 'node:path'
+import { basename, dirname, join, resolve as resolvePath } from 'node:path'
 
 import {
   FileSystem,
@@ -153,13 +153,7 @@ export class RunboxFileSystem extends FileSystem {
     opts?: { cwd?: string; signal?: AbortSignal },
   ): Promise<FsTarget> {
     const absolute = resolvePath(opts?.cwd ?? process.cwd(), path)
-    let canonical = absolute
-    try {
-      canonical = await realpath(absolute)
-    } catch {
-      // 目标不存在时 realpath 会失败；保留词法规范化的结果，
-      // 让后续操作自己去报"找不到"，而不是在这里把错误类型搞混。
-    }
+    const canonical = await this.canonicalize(absolute)
     return { targetKey: FsTargetKey(canonical), displayPath: canonical }
   }
 
@@ -308,7 +302,7 @@ export class RunboxFileSystem extends FileSystem {
       try {
         const info = await lstat(childPath)
         const type = info.isFile() ? 'file' : info.isDirectory() ? 'directory' : 'other'
-        const canonical = await realpath(childPath).catch(() => childPath)
+        const canonical = await this.canonicalize(childPath)
         entries.push({
           name: entryName,
           type,
@@ -431,6 +425,27 @@ export class RunboxFileSystem extends FileSystem {
       version: afterInfo?.version ?? versionOf(Date.now(), Buffer.byteLength(lfAfter)),
       before: lfBefore,
       after: lfAfter,
+    }
+  }
+
+  /**
+   * 规范化一个绝对路径，**目标不存在时也保持一致**。
+   *
+   * 这里踩过一个真实缺陷：`realpath` 对不存在的目标会失败，早先的实现于是退回
+   * 词法路径；而工作区根走的是 `realpath`（长名）。于是"新建文件"这个最常见的
+   * 场景里，两侧一个短名一个长名，包含判断恒为假——**所有新建都被拒绝**。
+   *
+   * 正确做法是把最深的存在祖先规范化，再把剩余段拼回去，让两侧始终同形。
+   */
+  private async canonicalize(absolute: string): Promise<string> {
+    try {
+      return await realpath(absolute)
+    } catch {
+      const parent = dirname(absolute)
+      if (parent === absolute) {
+        return absolute
+      }
+      return join(await this.canonicalize(parent), basename(absolute))
     }
   }
 
