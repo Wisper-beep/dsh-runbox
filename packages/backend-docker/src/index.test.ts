@@ -461,6 +461,63 @@ describe('集成：真实容器', { skip: dockerSkip }, () => {
       rmSync(hostDir, { recursive: true, force: true })
     }
   })
+  it('终端（pty）：交互式输入有回显，尺寸被接受', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-term-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-term', hostDir))
+      const term = await backend.startTerminal(box, {
+        argv: ['bash', '-i'],
+        cwd: hostDir,
+        rows: 24,
+        cols: 100,
+      })
+      assert.ok(term.pid > 0, '终端必须报告顶层进程 pid')
+      let out = ''
+      term.output.on('data', (chunk: Buffer) => {
+        out += chunk.toString('utf8')
+      })
+      await term.write('echo terminal-ok\n')
+      await term.write('exit\n')
+      await term.done
+      assert.match(out, /terminal-ok/, 'pty 里敲的命令应当有回显与输出')
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
+  it('终端前台信息如实报告「无法证明在等输入」', async () => {
+    const backend = new DockerBackend({ image })
+    const hostDir = mkdtempSync(join(tmpdir(), 'runbox-term-fg-'))
+    let box: BoxHandle | undefined
+    try {
+      box = await backend.create(makeSpec('it-term-fg', hostDir))
+      const term = await backend.startTerminal(box, {
+        argv: ['bash', '-i'],
+        cwd: hostDir,
+        rows: 24,
+        cols: 80,
+      })
+      const foreground = await term.inspectForeground()
+      assert.ok(foreground, '应当给出前台进程组')
+      assert.equal(foreground.processGroupId, term.pid)
+      // 关键：我们**没有**能力证明它正阻塞在终端输入上，因此必须报 false。
+      // 报 true 是撒谎，会让上层的"卡住了"判定给出错误结论。
+      assert.equal(foreground.inputWaiting, false)
+      await term.terminate()
+      await term.done
+    } finally {
+      if (box) {
+        await backend.remove(box)
+      }
+      rmSync(hostDir, { recursive: true, force: true })
+    }
+  })
+
 })
 
 describe('标签契约', () => {

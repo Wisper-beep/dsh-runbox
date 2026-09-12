@@ -12,10 +12,10 @@
  * | `terminate` 是唯一终止动词，按**进程树**升级 TERM→KILL | ✅ pid 文件 + 进程组信号 |
  * | `waitForExit` 观察整棵树 | ✅ |
  * | `stdin: 'pipe'` 暴露可写流 | ❌ 抛 `RunboxNotImplementedError`，排在 M3（需要 hijack 连接） |
- * | `spawnTerminal` 分配真实终端 | ❌ 抛 `RunboxNotImplementedError`，排在 M3 |
+ * | `spawnTerminal` 分配真实终端 | ✅ 走 pty（`Tty: true`），输出不带多路复用帧 |
  *
- * 没做到的两条**响亮失败**，不静默降级——一个"接受了参数但没按语义执行"的
- * 进程接口比一个直接报错的接口危险得多。
+ * pty 不可用时**响亮失败**，不退回管道——交互式程序在管道下会立刻表现出错误
+ * 行为，而调用方只会看到"程序自己退出了"，排查方向完全是错的。
  *
  * @module @dsh-runbox/provider-subprocess
  */
@@ -33,12 +33,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import type { Context } from '@deepseek-ai/cordis'
 
-import {
-  BoxManager,
-  RunboxNotImplementedError,
-  type BoxRequest,
-  type RunboxService,
-} from '@dsh-runbox/core'
+import { BoxManager, type BoxRequest, type RunboxService } from '@dsh-runbox/core'
 
 import { CollectBuffer, type CollectRead } from './collect.ts'
 
@@ -223,14 +218,41 @@ export class RunboxSubprocessService extends SubprocessService {
   }
 
   /**
-   * 分配一个真实终端。
+   * 分配一个真实终端（pty）。
    *
-   * @throws RunboxNotImplementedError - 排在 M3（`ctx.terminals` 后端会与它一起落地）。
+   * 只有这一条路径能让交互式程序正常工作。**不要**在 pty 不可用时退回管道：
+   * vim / REPL / top 在管道下会立刻表现出错误行为，而调用方只会看到"程序自己
+   * 退出了"，排查方向完全是错的。因此这里让错误一路抛到调用方。
    */
-  override spawnTerminal(_spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> {
-    return Promise.reject(
-      new RunboxNotImplementedError('SubprocessService.spawnTerminal', 'M3'),
-    )
+  override async spawnTerminal(
+    spec: SubprocessTerminalSpawnSpec,
+  ): Promise<SubprocessTerminalHandle> {
+    const env: Record<string, string> = {}
+    for (const [key, value] of Object.entries(spec.env ?? {})) {
+      if (value !== undefined) {
+        env[key] = value
+      }
+    }
+
+    const terminal = await this.#boxes.startTerminal(this.#requestFor(spec.cwd), {
+      argv: [...spec.argv],
+      cwd: spec.cwd,
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+      rows: spec.rows,
+      cols: spec.cols,
+      graceMs: spec.graceMs,
+    })
+
+    return {
+      pid: terminal.pid,
+      output: terminal.output,
+      // docker exec 不回报信号，只有退出码；如实填 null 而不是编一个。
+      done: terminal.done.then((outcome) => ({ exitCode: outcome.exitCode, signal: null })),
+      write: (data: string): Promise<void> => terminal.write(data),
+      inspectForeground: () => terminal.inspectForeground(),
+      signalForeground: (signal) => terminal.signalForeground(signal),
+      terminate: () => terminal.terminate(),
+    }
   }
 
   /** 终止所有仍在跑的流。服务卸载时调用。 */

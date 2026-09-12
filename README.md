@@ -17,7 +17,8 @@
 | M2 | `subprocess` 与 `fs` provider | ✅ 已在 CI 真机验证 |
 | M3 | 交互式 stdin | ✅ 已在 CI 真机验证 |
 | M4 | 执行世界统一 | ✅ 已完成 |
-| M4 | 真实终端（PTY）、`ctx.terminals` 后端、`provider-jobs` | 未开始 |
+| M4 | 真实终端（PTY） | ✅ 已在 CI 真机验证 |
+| M4 | `ctx.terminals` 后端、`provider-jobs` | 未开始 |
 | M5 | Web UI（设置 / 状态 / 审计）、网络与资源策略 | 未开始 |
 | M6 | Podman / WSL2 / microVM / SSH 第二后端、一致性测试套件 | 未开始 |
 
@@ -28,7 +29,7 @@
 | `@dsh-runbox/core` | 可用：后端注册表、箱契约、策略翻译、fail-closed 选择 |
 | `@dsh-runbox/backend-docker` | 可用：端点候选探测 + 完整箱生命周期（建 / 执行 / 停 / 删 / 列） |
 | `@dsh-runbox/provider-shell` | 前台执行可用；后台进程与 `danger-full-access` 明确报错 |
-| `@dsh-runbox/provider-subprocess` | 可用：spawn / 流式输出 / 批式与交互式 stdin / 偏移读取 / 进程树终止；`spawnTerminal` 明确报错 |
+| `@dsh-runbox/provider-subprocess` | 可用：spawn / 流式输出 / 批式与交互式 stdin / 偏移读取 / 进程树终止 / **真实终端（pty）** |
 | `@dsh-runbox/provider-fs` | 可用：读取 / 变更 / 围栏 / 版本守卫 / 换行风格保持 |
 | `@dsh-runbox/sandbox-bridge` | 占位，待 M2 |
 | `@dsh-runbox/provider-jobs` | 占位，待 M3 |
@@ -165,7 +166,7 @@ npm run seams:pull   # 拉取官方 seam 类型契约 → reference/dsh-seams/�
 
 **2. 两个 seam 行为尚未实现。**
 
-`provider-subprocess` 的 `spawnTerminal`（真实终端）在落地前抛 `RunboxNotImplementedError`——**响亮失败而不是静默降级**：一个「接受参数但没按语义执行」的进程接口，比一个直接报错的接口危险得多。
+`provider-subprocess` 的 `spawnTerminal` 在 pty 不可用时抛错而**不退回管道**——交互式程序（vim、REPL、top）在管道下会立刻表现出错误行为，而调用方只会看到「程序自己退出了」，排查方向完全是错的。
 
 **3. 文件变更在进程内按策略围栏，不绕容器。**
 

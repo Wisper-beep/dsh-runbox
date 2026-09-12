@@ -20,6 +20,8 @@ import type {
   BoxExecResult,
   BoxExecStream,
   BoxHandle,
+  BoxTerminal,
+  BoxTerminalRequest,
   BoxLimits,
   BoxNetworkMode,
   BoxSpec,
@@ -134,6 +136,22 @@ export class BoxManager {
       )
     }
     return binding.backend.startExec(binding.box, exec)
+  }
+
+  /**
+   * 在该执行世界里分配一个终端。
+   *
+   * 后端不支持 pty 时抛错而不是退化成管道——退化成管道会让交互式程序立刻
+   * 表现出错误行为，而调用方只会看到"程序自己退出了"，排查方向完全是错的。
+   */
+  async startTerminal(request: BoxRequest, terminal: BoxTerminalRequest): Promise<BoxTerminal> {
+    const binding = await this.bindingFor(request)
+    if (!binding.backend.startTerminal) {
+      throw new BackendUnavailableError(
+        `backend '${binding.backend.name}' does not support terminal (pty) allocation`,
+      )
+    }
+    return binding.backend.startTerminal(binding.box, terminal)
   }
 
   /** 取绑定，不存在则创建。 */

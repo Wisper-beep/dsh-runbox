@@ -23,6 +23,9 @@ import {
   type BoxExecResult,
   type BoxExecStream,
   type BoxHandle,
+  type BoxTerminal,
+  type BoxTerminalRequest,
+  type BoxTerminalSignal,
   type BoxSpec,
 } from '@dsh-runbox/core'
 
@@ -596,9 +599,9 @@ export class DockerBackend implements BoxBackend {
       return
     }
     this.lastTerminateDetail = `box ${box.id}: signalling ${String(pid)}`
-    await this.#signalTree(box, pid, 'TERM')
+    await this.#signalTree(box, pid, 'SIGTERM')
     setTimeout(() => {
-      void this.#signalTree(box, pid, 'KILL')
+      void this.#signalTree(box, pid, 'SIGKILL')
     }, graceMs)
   }
 
@@ -647,9 +650,13 @@ export class DockerBackend implements BoxBackend {
    * 先杀父会让子进程 reparent，之后就再也找不到它们。只用 `/proc` 与 shell
    * 内建，不假设镜像里装了 `pgrep` / `ps`。
    */
-  async #signalTree(box: BoxHandle, pid: number, signal: 'TERM' | 'KILL'): Promise<void> {
+  async #signalTree(
+    box: BoxHandle,
+    pid: number,
+    signal: BoxTerminalSignal,
+  ): Promise<number> {
     const script = [
-      'sig="$1"; root="$2"',
+      'sig="${1#SIG}"; root="$2"; n=0',
       'children() {',
       '  for d in /proc/[0-9]*; do',
       '    p="${d#/proc/}"',
@@ -660,14 +667,135 @@ export class DockerBackend implements BoxBackend {
       '}',
       'sweep() {',
       '  for c in $(children "$1"); do sweep "$c"; done',
-      '  kill -"$sig" "$1" 2>/dev/null || true',
+      '  if kill -"$sig" "$1" 2>/dev/null; then n=$((n + 1)); fi',
       '}',
       'sweep "$root"',
+      'printf "%s" "$n"',
     ].join('\n')
-    await this.exec(box, {
+    const result = await this.exec(box, {
       argv: ['bash', '-c', script, 'dsh-runbox', signal, String(pid)],
       cwd: RUNBOX_RUNTIME_DIR,
     })
+    const count = Number.parseInt(result.stdout.trim(), 10)
+    return Number.isFinite(count) ? count : 0
+  }
+
+  /**
+   * 在箱内分配一个终端（pty）。
+   *
+   * 与非终端路径相比这里**更简单**：`Tty: true` 时容器引擎分配一个 pty 设备，
+   * stdout 与 stderr 合并成同一条流，也不再有 8 字节多路复用帧——因此不需要
+   * 拆帧器，socket 上来的就是原始字节。
+   *
+   * `inspectForeground` 如实报告"无法证明"：本后端能给出前台进程组 id（就是顶层
+   * pid），但**没有**能力证明它正阻塞在终端输入上。契约把 `inputWaiting` 定义为
+   * "能否证明"，因此这里返回 `false` 是准确答案，而不是退而求其次的猜测。
+   */
+  async startTerminal(box: BoxHandle, request: BoxTerminalRequest): Promise<BoxTerminal> {
+    const spec = this.#specs.get(box.id)
+    const runtimeDir = spec ? runtimeDirFor(spec) : RUNBOX_RUNTIME_DIR
+    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    const pidFile = `${runtimeDir}/${nonce}.pid`
+
+    const wrapped = [
+      'bash',
+      '-c',
+      `echo $$ > ${pidFile}; exec "$@"`,
+      'dsh-runbox',
+      ...request.argv,
+    ]
+    const env = request.env
+      ? Object.entries(request.env).map(([key, value]) => `${key}=${value}`)
+      : undefined
+
+    const created = await this.#call('POST', `/containers/${box.id}/exec`, {
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: true,
+      Cmd: wrapped,
+      WorkingDir: request.cwd,
+      ...(env ? { Env: env } : {}),
+    })
+    const execId = parseJson<{ Id?: string }>(created.body, 'exec/create').Id
+    if (!execId) {
+      throw new Error('docker engine did not return an exec id')
+    }
+
+    const endpoint = await this.#engine()
+    const hijacked = await engineHijack(
+      endpoint,
+      'POST',
+      `/exec/${execId}/start`,
+      { Detach: false, Tty: true },
+    )
+
+    // 初始尺寸：pty 默认 80x24，请求里的 rows/cols 需要显式下发。
+    await this.#call(
+      'POST',
+      `/exec/${execId}/resize?h=${String(request.rows)}&w=${String(request.cols)}`,
+    ).catch(() => undefined)
+
+    const output = new PassThrough()
+    if (hijacked.head.length > 0) {
+      output.write(hijacked.head)
+    }
+    hijacked.socket.on('data', (chunk: Buffer) => {
+      output.write(chunk)
+    })
+
+    const done = new Promise<{ exitCode: number | null }>((resolve) => {
+      let settled = false
+      const settle = async (): Promise<void> => {
+        if (settled) {
+          return
+        }
+        settled = true
+        let exitCode: number | null = null
+        try {
+          const inspected = await this.#call('GET', `/exec/${execId}/json`)
+          exitCode = parseJson<ExecInspect>(inspected.body, 'exec/inspect').ExitCode ?? null
+        } catch {
+          // 连接断了就取不到退出码；如实报 null 而不是编一个
+        }
+        output.end()
+        resolve({ exitCode })
+      }
+      hijacked.socket.on('end', () => void settle())
+      hijacked.socket.on('close', () => void settle())
+      hijacked.socket.on('error', () => void settle())
+    })
+
+    const pid = (await this.#readPidFile(box, pidFile)) ?? -1
+
+    return {
+      pid,
+      output,
+      done,
+      write: (data: string): Promise<void> =>
+        new Promise<void>((resolve, reject) => {
+          hijacked.socket.write(data, (error) => {
+            if (error) {
+              reject(error)
+              return
+            }
+            resolve()
+          })
+        }),
+      inspectForeground: () =>
+        Promise.resolve(
+          pid > 0 ? { processGroupId: pid, inputWaiting: false } : undefined,
+        ),
+      signalForeground: async (signal: BoxTerminalSignal): Promise<number> => {
+        if (pid <= 0) {
+          return 0
+        }
+        return this.#signalTree(box, pid, signal)
+      },
+      terminate: async (): Promise<void> => {
+        await this.#terminateTree(box, pidFile, request.graceMs ?? 5000)
+      },
+    }
   }
 
   /** 停止箱。箱子可能已经停了——这不是错误。 */

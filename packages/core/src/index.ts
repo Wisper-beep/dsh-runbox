@@ -46,6 +46,10 @@ export type {
   BoxSpec,
   BoxState,
   BoxStdinMode,
+  BoxTerminal,
+  BoxTerminalForeground,
+  BoxTerminalRequest,
+  BoxTerminalSignal,
 } from './types.ts'
 
 /** 建箱默认值：镜像 / 网络 / 资源。 */

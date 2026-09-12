@@ -135,6 +135,60 @@ export interface BoxExecStream {
 }
 
 /**
+ * 一次**终端**（PTY）执行的请求。
+ *
+ * 与 `BoxExecRequest` 的区别不只是多一个尺寸：终端意味着**单个 pty 设备**——
+ * stdout 与 stderr 合并到同一条流，没有多路复用帧，所有输出就是"给人看、给人敲"
+ * 的那条字节流。因此它比非终端路径更简单，而不是更复杂。
+ */
+export interface BoxTerminalRequest {
+  /** 要执行的确切 argv。 */
+  readonly argv: readonly string[]
+  /** 箱内工作目录。 */
+  readonly cwd: string
+  /** 追加的环境变量。 */
+  readonly env?: Readonly<Record<string, string>> | undefined
+  /** 初始行数。 */
+  readonly rows: number
+  /** 初始列数。 */
+  readonly cols: number
+  /** 终止整个终端会话时 TERM 到 KILL 的宽限期（毫秒）；缺省由后端决定。 */
+  readonly graceMs?: number | undefined
+}
+
+/** 终端可接受的信号。 */
+export type BoxTerminalSignal = 'SIGINT' | 'SIGTERM' | 'SIGKILL' | 'SIGTSTP' | 'SIGHUP'
+
+/** 终端前台进程组的事实。 */
+export interface BoxTerminalForeground {
+  /** 前台进程组 id。 */
+  readonly processGroupId: number
+  /** 本后端能否**证明**该进程组正在等待终端输入。 */
+  readonly inputWaiting: boolean
+}
+
+/** 一个活着的箱内终端。 */
+export interface BoxTerminal {
+  /** 顶层进程 id（箱内命名空间内的值）。 */
+  readonly pid: number
+  /** pty 原始输出字节，按投递顺序；终端退出后结束。 */
+  readonly output: Readable
+  /** 顶层进程退出后 resolve 出退出码。 */
+  readonly done: Promise<{ exitCode: number | null }>
+  /** 向 pty 写入（等价于键盘输入）。 */
+  write(data: string): Promise<void>
+  /** 前台进程组事实；无法确定时返回 `undefined`。 */
+  inspectForeground(): Promise<BoxTerminalForeground | undefined>
+  /**
+   * 向前台进程树发信号。
+   * @returns 实际收到信号的进程数。
+   */
+  signalForeground(signal: BoxTerminalSignal): Promise<number>
+  /** 终止整个终端会话：先 TERM，宽限期后 KILL。 */
+  terminate(): Promise<void>
+}
+
+/**
  * 后端契约。实现者只需要把这一组方法做对，上层 provider 就能复用。
  *
  * 注意 `probe()`：它是 fail-closed 的入口。registry 在选中后端前必须先探测，
@@ -164,6 +218,15 @@ export interface BoxBackend {
    * 那会静默改变 `spawn` 的语义。
    */
   startExec?(box: BoxHandle, request: BoxExecRequest): Promise<BoxExecStream>
+
+  /**
+   * 在箱内分配一个**终端**（pty）。
+   *
+   * 同样声明为可选。缺失时 `BoxManager.startTerminal()` 抛错而不是退化成管道——
+   * 退化成管道会让交互式程序（vim、REPL、top）立刻表现出错误行为，而调用方
+   * 只会看到"程序自己退出了"，排查方向完全是错的。
+   */
+  startTerminal?(box: BoxHandle, request: BoxTerminalRequest): Promise<BoxTerminal>
 
   /** 停止箱，但保留其身份以便回收与审计。 */
   stop(box: BoxHandle): Promise<void>
