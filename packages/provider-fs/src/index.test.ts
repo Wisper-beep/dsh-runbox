@@ -389,11 +389,14 @@ describe('真实文件系统：非规范的工作区根', () => {
 
   it('越界的根仍然被拒绝——规范化不是放宽围栏', async () => {
     const target = await fsService.resolve(join(sandbox, 'still-denied.txt'))
+    // 根取 sandbox/sub（目标在它的**外面**）；注意别用 join(sandbox,'..')——
+    // 那是父目录，目标确实在它下面，放行才是对的。
+    const narrowRoot = join(sandbox, 'sub')
     await assert.rejects(
       () =>
         fsService.writeText(target, 'x', undefined, undefined, {
           mode: 'workspace-write',
-          workspaceRoot: join(sandbox, '..'),
+          workspaceRoot: narrowRoot,
         }),
       /outside the workspace/,
     )
