@@ -85,19 +85,27 @@ export async function canonicalWorldRoot(absolute: string): Promise<string> {
 /**
  * 按既定规则解析出执行世界。
  *
+ * **两侧必须同为规范形式**——这是本函数最容易写错的地方：把未规范化的 `cwd`
+ * 直接拿去和已规范化的已知根比较，继承规则会在"短名 vs 长名"这类环境里永远
+ * 失效（Windows 的 `RUNNER~1` 与 `runneradmin` 就是实例），于是同一个工作区又
+ * 悄悄变成两个箱。因此先规范化 `cwd`，再比较。
+ *
  * @param cwd - 执行发生的目录。
  * @param explicitRoot - 调用方确知的工作区根（可选）。
- * @param knownRoots - 已经挂载过的世界根。
+ * @param knownRoots - 已经挂载过的世界根（应为规范形式）。
+ * @param canonicalize - 规范化函数；注入以便测试上面那条时序要求。
  * @returns 规范化后的世界根。
  */
 export async function resolveWorldRoot(
   cwd: string,
   explicitRoot: string | undefined,
   knownRoots: readonly string[],
+  canonicalize: (path: string) => Promise<string> = canonicalWorldRoot,
 ): Promise<string> {
   if (explicitRoot) {
-    return canonicalWorldRoot(explicitRoot)
+    return canonicalize(explicitRoot)
   }
-  const inherited = pickWorldRoot(cwd, knownRoots)
-  return canonicalWorldRoot(inherited ?? cwd)
+  const canonicalCwd = await canonicalize(cwd)
+  const inherited = pickWorldRoot(canonicalCwd, knownRoots)
+  return inherited ?? canonicalCwd
 }

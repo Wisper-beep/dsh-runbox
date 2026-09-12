@@ -19,7 +19,7 @@ import { after, describe, it } from 'node:test'
 
 import { BoxManager } from './box-manager.ts'
 import { BackendRegistry } from './registry.ts'
-import { canonicalWorldRoot, pickWorldRoot } from './world.ts'
+import { canonicalWorldRoot, pickWorldRoot, resolveWorldRoot } from './world.ts'
 import type { BoxBackend, BoxSpec } from './types.ts'
 
 /** 记录每次 create 的规格，用来断言"到底建了几个箱、挂在哪个根上"。 */
@@ -92,6 +92,31 @@ describe('pickWorldRoot（纯解析规则）', () => {
 
   it('没有命中时返回 undefined，交由调用方决定', () => {
     assert.equal(pickWorldRoot('/somewhere', []), undefined)
+  })
+})
+
+describe('resolveWorldRoot 的时序要求', () => {
+  /**
+   * 这条用例是为 CI 上那个 Windows 缺陷写的：cwd 未规范化、已知根已规范化时，
+   * 继承规则会永远失效——短名与长名对不上，于是同一个工作区又变成两个箱。
+   * 注入一个假的规范化函数，就能在不依赖具体环境的前提下钉死"先规范化再比较"。
+   */
+  it('比较前必须先把 cwd 规范化，否则短名与长名对不上', async () => {
+    const canonicalize = (path: string): Promise<string> =>
+      Promise.resolve(path.replace('SHORT', 'LONG'))
+    const world = await resolveWorldRoot(
+      '/SHORT/repo/sub/deep',
+      undefined,
+      ['/LONG/repo'],
+      canonicalize,
+    )
+    assert.equal(world, '/LONG/repo', '应当继承已知根，而不是把 cwd 自己当成世界')
+  })
+
+  it('确知根时以它为准，不去继承', async () => {
+    const canonicalize = (path: string): Promise<string> => Promise.resolve(path)
+    const world = await resolveWorldRoot('/a/b', '/c', ['/a'], canonicalize)
+    assert.equal(world, '/c')
   })
 })
 
