@@ -370,6 +370,36 @@ describe('真实文件系统：列举与目标身份', () => {
   })
 })
 
+describe('真实文件系统：非规范的工作区根', () => {
+  it('策略给的根未规范化时，包含判断仍然成立', async () => {
+    // 这是 CI 抓出来的真实缺陷：resolve() 会把目标做 realpath，而策略给的根未必是
+    // 规范路径（Windows 短名 RUNNER~1 vs runneradmin、符号链接、多余的 ..）。
+    // 两者对不上时包含判断恒为假，于是**所有写入都被拒绝**——不是安全问题
+    // （fail-closed），但会让文件能力直接不可用。
+    const { mkdirSync } = await import('node:fs')
+    mkdirSync(join(sandbox, 'sub'), { recursive: true })
+    const nonCanonicalRoot = join(sandbox, 'sub', '..')
+    const target = await fsService.resolve(join(sandbox, 'noncanon.txt'))
+    const outcome = await fsService.writeText(target, 'ok\n', undefined, undefined, {
+      mode: 'workspace-write',
+      workspaceRoot: nonCanonicalRoot,
+    })
+    assert.equal(outcome.operation, 'create')
+  })
+
+  it('越界的根仍然被拒绝——规范化不是放宽围栏', async () => {
+    const target = await fsService.resolve(join(sandbox, 'still-denied.txt'))
+    await assert.rejects(
+      () =>
+        fsService.writeText(target, 'x', undefined, undefined, {
+          mode: 'workspace-write',
+          workspaceRoot: join(sandbox, '..'),
+        }),
+      /outside the workspace/,
+    )
+  })
+})
+
 describe('真实文件系统：二进制拒绝', () => {
   it('读二进制文件报 FS_NOT_TEXT', async () => {
     const binary = join(sandbox, 'blob.bin')

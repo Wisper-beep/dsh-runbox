@@ -129,6 +129,8 @@ export function effectiveMode(policy: SandboxExecutionPolicy | undefined): Sandb
  */
 export class RunboxFileSystem extends FileSystem {
   private readonly platform = hostPlatform()
+  /** 规范化的工作区根缓存：策略给的根未必是规范路径（见 canonicalRoot）。 */
+  private readonly rootCache = new Map<string, string>()
 
   constructor(ctx: Context) {
     super(ctx)
@@ -334,7 +336,7 @@ export class RunboxFileSystem extends FileSystem {
   ): Promise<FsWriteOutcome> {
     signal?.throwIfAborted()
     const before = await this.readIfPresent(target, signal)
-    this.assertMutable(target, sandboxPolicy, before !== null)
+    this.assertMutable(target, sandboxPolicy, await this.rootFor(sandboxPolicy), before !== null)
 
     if (before !== null) {
       if (expected?.kind === 'createIfAbsent') {
@@ -389,7 +391,7 @@ export class RunboxFileSystem extends FileSystem {
     if (before === null) {
       throw new FsError(`no such file: ${target.displayPath}`, 'FS_NOT_FOUND')
     }
-    this.assertMutable(target, sandboxPolicy, true)
+    this.assertMutable(target, sandboxPolicy, await this.rootFor(sandboxPolicy), true)
 
     if (expected) {
       const current = await this.requireVersion(target, signal)
@@ -432,10 +434,32 @@ export class RunboxFileSystem extends FileSystem {
     }
   }
 
+  /**
+   * 取规范化的工作区根。
+   *
+   * **为什么必须规范化**：`resolve()` 会把目标做 `realpath`，而策略给的根未必是
+   * 规范路径——Windows 短名（`RUNNER~1` vs `runneradmin`）、符号链接、macOS 的
+   * 大小写不敏感都会让两者对不上。对不上的后果是包含判断恒为假，于是**所有写入
+   * 都被拒绝**。这不是安全问题（fail-closed），但会让文件能力直接不可用。
+   */
+  private async rootFor(policy: SandboxExecutionPolicy | undefined): Promise<string | undefined> {
+    const raw = policy?.workspaceRoot
+    if (!raw) {
+      return undefined
+    }
+    const cached = this.rootCache.get(raw)
+    if (cached !== undefined) {
+      return cached
+    }
+    const resolved = await realpath(raw).catch(() => raw)
+    this.rootCache.set(raw, resolved)
+    return resolved
+  }
   /** 围栏判定：模式与工作区边界。拒绝时用 `FS_SANDBOX_DENIED` 而不是普通 IO 错误。 */
   private assertMutable(
     target: FsTarget,
     policy: SandboxExecutionPolicy | undefined,
+    root: string | undefined,
     exists: boolean,
   ): void {
     const mode = effectiveMode(policy)
@@ -445,10 +469,8 @@ export class RunboxFileSystem extends FileSystem {
         'FS_SANDBOX_DENIED',
       )
     }
-    if (policy?.workspaceRoot) {
-      const root = policy.workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '')
-      const candidate = target.displayPath.replace(/\\/g, '/')
-      if (!isAtOrUnder(root, candidate)) {
+    if (root) {
+      if (!isAtOrUnder(root, target.displayPath)) {
         throw new FsError(
           `path is outside the workspace boundary: ${target.displayPath}`,
           'FS_SANDBOX_DENIED',
