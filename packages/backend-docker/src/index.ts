@@ -531,40 +531,6 @@ export class DockerBackend implements BoxBackend {
     }
   }
 
-  /**
-   * 读取包装脚本写下的 pid，**轮询而不是单次读取**。
-   *
-   * 单次读取有过真实的失败模式（CI 上两次运行结果不同）：调用方在 pid 文件就绪前
-   * 触发终止，于是它静默什么都不做。轮询把这个窗口收窄到"进程确实没起来"，
-   * 而那本来就无事可做。
-   *
-   * @param box - 目标箱。
-   * @param pidFile - 包装脚本写入 pid 的路径。
-   * @param budgetMs - 等待预算。
-   * @returns 目标进程的 pid；预算内始终拿不到时返回 `undefined`。
-   */
-  async #readPidFile(
-    box: BoxHandle,
-    pidFile: string,
-    budgetMs = 3000,
-  ): Promise<number | undefined> {
-    const deadline = Date.now() + budgetMs
-    for (;;) {
-      const read = await this.exec(box, {
-        argv: ['bash', '-c', `cat ${pidFile} 2>/dev/null || true`],
-        cwd: RUNBOX_RUNTIME_DIR,
-      })
-      const pid = Number.parseInt(read.stdout.trim(), 10)
-      if (Number.isFinite(pid) && pid > 0) {
-        return pid
-      }
-      if (Date.now() >= deadline) {
-        return undefined
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    }
-  }
-
   /** 按进程树终止：先 SIGTERM，宽限期后 SIGKILL。 */
   async #terminateTree(box: BoxHandle, pidFile: string, graceMs: number): Promise<void> {
     const pid = await this.#readPidFile(box, pidFile)
@@ -615,7 +581,6 @@ export class DockerBackend implements BoxBackend {
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
   }
-
   /**
    * 向**整棵进程树**发信号。
    *
