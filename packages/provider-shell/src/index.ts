@@ -211,8 +211,11 @@ export class RunboxShellExecutor extends ShellExecutor {
       )
     }
     return {
+      cwd: spec.workdir,
+      // 只有拿到 policy 时才有权威的工作区根；拿不到就留空，让 BoxManager
+      // 走"继承已有世界"的规则，而不是在这里用 workdir 凑一个。
+      workspaceRoot: policy?.workspaceRoot,
       sessionId: policy?.sessionId,
-      workspaceRoot: policy?.workspaceRoot ?? spec.workdir,
       mode,
     }
   }

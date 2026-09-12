@@ -54,10 +54,6 @@ export const inject = ['runbox'] as const
 /** 默认强制的沙箱模式；`SubprocessSpawnSpec` 不带策略，所以这里给一个安全默认值。 */
 export const DEFAULT_MODE = 'workspace-write' as const
 
-/** 箱的会话键：这个 seam 拿不到 session，用 cwd 作为执行世界的标识。 */
-export function boxKeyForCwd(cwd: string): string {
-  return `cwd:${cwd}`
-}
 
 /**
  * 箱内的进程执行世界。
@@ -248,8 +244,10 @@ export class RunboxSubprocessService extends SubprocessService {
   /** 由 cwd 推导箱请求。这个 seam 拿不到 session，因此用 cwd 作为执行世界标识。 */
   #requestFor(cwd: string): BoxRequest {
     return {
-      sessionId: boxKeyForCwd(cwd),
-      workspaceRoot: cwd,
+      cwd,
+      // 这个 seam 拿不到会话，因此不提供权威根：若 cwd 落在某个已挂载的
+      // 世界之下，BoxManager 会复用它——这正是"先 shell 建箱、再在这里跑"
+      // 收敛到同一个箱的机制。
       mode: DEFAULT_MODE,
     }
   }

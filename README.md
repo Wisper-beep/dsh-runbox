@@ -16,7 +16,8 @@
 | M1 | Docker 箱生命周期；`shell` 前台执行 | ✅ 已在 CI 真机验证 |
 | M2 | `subprocess` 与 `fs` provider | ✅ 已在 CI 真机验证 |
 | M3 | 交互式 stdin | ✅ 已在 CI 真机验证 |
-| M4 | 终端、`terminal` / `jobs` provider、箱绑定键统一 | 未开始 |
+| M4 | 执行世界统一 | ✅ 已完成 |
+| M4 | 真实终端（PTY）、`ctx.terminals` 后端、`provider-jobs` | 未开始 |
 | M5 | Web UI（设置 / 状态 / 审计）、网络与资源策略 | 未开始 |
 | M6 | Podman / WSL2 / microVM / SSH 第二后端、一致性测试套件 | 未开始 |
 
@@ -49,7 +50,7 @@ DeepSeek Harness 官方文档 `docs/subsystems/sandbox.zh.md` 写道：
 ### 它做什么
 
 - **真实边界**：`read-only` / `workspace-write` 由容器挂载标志在挂载命名空间层面强制，不是应用层的自觉。
-- **可丢弃、可复现**：每个会话一个箱子，跑完即弃；环境由镜像定义。
+- **可丢弃、可复现**：每份工作区一个箱子，跑完即弃；环境由镜像定义。落在同一工作区下的 shell、文件、子进程与后台任务共用这一个箱。
 - **零改上层**：实现的是官方 capability seam，审批、权限、成本、审计等既有插件无需改动即可获得隔离能力。
 - **失败即拒绝**：容器不可用时抛 `SandboxUnavailableError`，绝不静默回落到宿主执行。
 
@@ -89,7 +90,9 @@ dsh-runbox
 
 **fail-closed。** 后端选择逐个探测，全部不可用时抛 `BackendUnavailableError`。代码里不存在"降级为不隔离"的分支，并有测试守着。
 
-**执行世界一致。** 官方要求 `ctx.fs` 与 `ctx.subprocess` 共享同一个执行世界，因此 `fs.processPath()` 交给子进程的路径在箱内必须可打开——两者成对替换，工作区在箱内挂载到与宿主相同的路径。
+**执行世界一致。** 官方要求 `ctx.fs` 与 `ctx.subprocess` 共享同一个执行世界，因此 `fs.processPath()` 交给子进程的路径在箱内必须可打开。做法是让**世界由工作区根标识**，并按一条确定的规则解析：调用方确知根时（如 shell 拿到 `ctx.sandboxPolicy.workspaceRoot`）以它为准；否则若 `cwd` 落在某个**已挂载**的世界根之下就复用它；再否则以 `cwd` 自身为根。第二条是收敛的关键——它让"先由 shell 建箱、再由 subprocess 在里面跑"自动落到同一个箱，不需要任何跨 provider 的注册协议。
+
+宿主的 Windows 路径与箱内 Linux 路径的映射由 `core/paths.ts` 承担（`E:\repo\a.txt` → `/e/repo/a.txt`）。
 
 **注册即可逆。** 所有注册都走 Cordis 的 `ctx.effect`，返回注销函数，热卸载不留残余。
 

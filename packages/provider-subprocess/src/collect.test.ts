@@ -12,7 +12,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 
-import { CollectBuffer, boxKeyForCwd, DEFAULT_MODE } from './index.ts'
+import { pickWorldRoot } from '@dsh-runbox/core'
+
+import { CollectBuffer, DEFAULT_MODE } from './index.ts'
 
 describe('CollectBuffer 基础语义', () => {
   it('未超限时快照就是全文', () => {
@@ -141,10 +143,21 @@ describe('CollectBuffer spill 文件', () => {
   })
 })
 
-describe('执行世界标识', () => {
-  it('箱按 cwd 分组——这个 seam 拿不到 session', () => {
-    assert.equal(boxKeyForCwd('/repo'), 'cwd:/repo')
-    assert.notEqual(boxKeyForCwd('/a'), boxKeyForCwd('/b'))
+describe('执行世界解析（这个 seam 拿不到 session，靠继承收敛）', () => {
+  it('cwd 落在已挂载的世界之下时，复用那个世界', () => {
+    assert.equal(pickWorldRoot('/repo/sub', ['/repo']), '/repo')
+  })
+
+  it('嵌套时取最深的那层', () => {
+    assert.equal(pickWorldRoot('/repo/inner/src', ['/repo', '/repo/inner']), '/repo/inner')
+  })
+
+  it('cwd 不在任何已知世界之下时不猜', () => {
+    assert.equal(pickWorldRoot('/elsewhere', ['/repo']), undefined)
+  })
+
+  it('前缀相同但不是子路径的不算命中', () => {
+    assert.equal(pickWorldRoot('/repo-other/src', ['/repo']), undefined)
   })
 
   it('默认模式是受限的', () => {

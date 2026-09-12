@@ -24,7 +24,8 @@ export {
   UnsupportedModeError,
 } from './errors.ts'
 export { BackendRegistry } from './registry.ts'
-export { BoxManager, sessionKey, type BoxDefaults, type BoxRequest } from './box-manager.ts'
+export { BoxManager, type BoxDefaults, type BoxRequest } from './box-manager.ts'
+export { canonicalWorldRoot, pickWorldRoot, resolveWorldRoot } from './world.ts'
 export { confinementFor, withinWorkspace, type BoxConfinement } from './policy.ts'
 export {
   fromBoxPath,
