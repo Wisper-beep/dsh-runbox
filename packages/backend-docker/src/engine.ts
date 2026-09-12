@@ -10,6 +10,8 @@
 import { request, type IncomingMessage } from 'node:http'
 import { platform } from 'node:process'
 
+import { isAtOrUnder } from '@dsh-runbox/core'
+
 /** 一个引擎端点。 */
 export type EngineEndpoint =
   | { readonly kind: 'socket'; readonly socketPath: string }
@@ -239,14 +241,7 @@ export const LABELS = {
   session: 'dsh.runbox.session',
 } as const
 
-/** 判断 `child` 是否等于 `parent` 或位于其下（纯词法，路径已规范化）。 */
-export function isAtOrUnder(parent: string, child: string): boolean {
-  if (parent === child) {
-    return true
-  }
-  const base = parent.endsWith('/') ? parent : `${parent}/`
-  return child.startsWith(base)
-}
+export { isAtOrUnder } from '@dsh-runbox/core'
 
 /**
  * 计算真正可用的 tmpfs 路径。

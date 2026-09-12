@@ -15,6 +15,7 @@
 
 import type { ConfinedSandboxMode, SandboxEnforcement } from '@deepseek-ai/dsh-sandbox'
 import { UnsupportedModeError } from './errors.ts'
+import { isAtOrUnder } from './paths.ts'
 
 /** 箱的围栏配置——后端据此设置 rootfs 与工作区的挂载标志。 */
 export interface BoxConfinement {
@@ -80,9 +81,5 @@ export function confinementFor(mode: ConfinedSandboxMode): BoxConfinement {
  * @returns 候选路径是否等于工作区根或位于其下。
  */
 export function withinWorkspace(workspaceRoot: string, candidate: string): boolean {
-  if (candidate === workspaceRoot) {
-    return true
-  }
-  const base = workspaceRoot.endsWith('/') ? workspaceRoot : `${workspaceRoot}/`
-  return candidate.startsWith(base)
+  return isAtOrUnder(workspaceRoot, candidate)
 }

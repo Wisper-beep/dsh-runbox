@@ -26,6 +26,13 @@ export {
 export { BackendRegistry } from './registry.ts'
 export { BoxManager, sessionKey, type BoxDefaults, type BoxRequest } from './box-manager.ts'
 export { confinementFor, withinWorkspace, type BoxConfinement } from './policy.ts'
+export {
+  fromBoxPath,
+  hostPlatform,
+  isAtOrUnder,
+  toBoxPath,
+  type HostPlatform,
+} from './paths.ts'
 export type {
   BoxBackend,
   BoxExecRequest,

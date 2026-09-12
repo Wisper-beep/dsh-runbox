@@ -14,8 +14,8 @@
 |---|---|---|
 | M0 | 官方 seam 契约、monorepo 骨架、CI、最小插件加载 | ✅ 已完成 |
 | M1 | Docker 箱生命周期；`shell` 前台执行 | ✅ 已在 CI 真机验证 |
-| M2 | `subprocess` provider | ✅ 已在 CI 真机验证（`fs` 顺延至 M3） |
-| M3 | `fs` provider、交互式 stdin、终端、`terminal` / `jobs` provider、会话级生命周期 | 未开始 |
+| M2 | `subprocess` 与 `fs` provider | ✅ 已在 CI 真机验证 |
+| M3 | 交互式 stdin、终端、`terminal` / `jobs` provider、会话级生命周期 | 未开始 |
 | M4 | Web UI（设置 / 状态 / 审计）、网络与资源策略 | 未开始 |
 | M5 | Podman / WSL2 / microVM / SSH 第二后端、一致性测试套件 | 未开始 |
 
@@ -27,7 +27,7 @@
 | `@dsh-runbox/backend-docker` | 可用：端点候选探测 + 完整箱生命周期（建 / 执行 / 停 / 删 / 列） |
 | `@dsh-runbox/provider-shell` | 前台执行可用；后台进程与 `danger-full-access` 明确报错 |
 | `@dsh-runbox/provider-subprocess` | 可用：spawn / 流式输出 / 偏移读取 / 进程树终止；`stdin: pipe` 与 `spawnTerminal` 明确报错 |
-| `@dsh-runbox/provider-fs` | 占位，待 M2 |
+| `@dsh-runbox/provider-fs` | 可用：读取 / 变更 / 围栏 / 版本守卫 / 换行风格保持 |
 | `@dsh-runbox/sandbox-bridge` | 占位，待 M2 |
 | `@dsh-runbox/provider-jobs` | 占位，待 M3 |
 | `@dsh-runbox/provider-terminal` | 占位，待 M3 |
@@ -163,11 +163,15 @@ npm run seams:pull   # 拉取官方 seam 类型契约 → reference/dsh-seams/�
 
 `provider-subprocess` 的 `stdio.stdin: 'pipe'`（需要 hijack 连接）与 `spawnTerminal`（真实终端）在 M3 落地前一律抛 `RunboxNotImplementedError`——**响亮失败而不是静默降级**：一个「接受参数但没按语义执行」的进程接口，比一个直接报错的接口危险得多。
 
-**3. 需要 Linux 容器引擎。**
+**3. 文件变更在进程内按策略围栏，不绕容器。**
+
+`provider-fs` 的变更由它自己按 `ctx.sandboxPolicy` 判定（`read-only` 拒绝一切写入、`workspace-write` 限定在工作区内），与官方 `fs-sandbox` 同构；容器侧的只读挂载是**进程侧的纵深防御**，管的是 `bash` 越界。两层语义一致，各管一条路径。
+
+**4. 需要 Linux 容器引擎。**
 
 Windows 容器引擎不支持只读 rootfs（`invalid option: read-only mode is not supported for Windows containers`），因此**兑现不了**承诺的文件效果围栏。`create()` 会先读 `/info` 的 `OSType`，非 Linux 直接抛 `UnsupportedModeError` 并说明怎么办，而不是降级成可写 rootfs 的假隔离。
 
-**4. 契约门禁是编译期的。**
+**5. 契约门禁是编译期的。**
 
 它能证明**签名一致**，不能证明**行为一致**。行为一致性由 `packages/conformance` 与 `backend-docker` 的集成用例覆盖——后者在真实容器里建箱、执行、验证宿主无副作用、验证只读真的拒绝写入；引擎不具备时整组跳过而不是失败。
 

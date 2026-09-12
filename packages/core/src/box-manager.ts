@@ -11,6 +11,7 @@ import type { ConfinedSandboxMode } from '@deepseek-ai/dsh-sandbox'
 
 import { BackendUnavailableError } from './errors.ts'
 import { confinementFor } from './policy.ts'
+import { hostPlatform, toBoxPath } from './paths.ts'
 import type { BackendRegistry } from './registry.ts'
 import type {
   BoxBackend,
@@ -124,7 +125,7 @@ export class BoxManager {
     const spec: BoxSpec = {
       sessionId: key,
       workspaceRoot: request.workspaceRoot,
-      workspaceMountPath: request.workspaceRoot,
+      workspaceMountPath: toBoxPath(request.workspaceRoot, hostPlatform()),
       image: this.#defaults.image,
       network: this.#defaults.network,
       limits: this.#defaults.limits,

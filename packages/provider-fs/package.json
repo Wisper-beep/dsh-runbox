@@ -24,6 +24,8 @@
   ],
   "dependencies": {
     "@deepseek-ai/dsh-fs": "0.0.1-rc.1",
+    "@deepseek-ai/dsh-sandbox": "0.0.1-rc.1",
+    "@deepseek-ai/dsh-sandbox-policy": "0.0.1-rc.1",
     "@dsh-runbox/core": "0.0.0"
   },
   "peerDependencies": {
