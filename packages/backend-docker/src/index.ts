@@ -447,7 +447,9 @@ export class DockerBackend implements BoxBackend {
       }
     }
 
-    const redirect = stdinPath ? `< ${stdinPath}` : '< /dev/null'
+    // 重定向：交互式 stdin **不能加任何重定向**，否则会把劫持来的输入整条丢掉。
+    // 第一版正是漏了这条——包装脚本把 stdin 指向 /dev/null，劫持白做，CI 抓出来了。
+    const redirect = wantsStdinPipe ? '' : stdinPath ? `< ${stdinPath}` : '< /dev/null'
     const wrapped = [
       'bash',
       '-c',
